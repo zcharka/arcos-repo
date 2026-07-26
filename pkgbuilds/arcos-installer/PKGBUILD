@@ -1,0 +1,29 @@
+# Maintainer: Zcharka <zcharkayt@gmail.com>, fork of Linexin Installer
+
+pkgname=arcos-installer
+pkgver=1.5.8
+pkgrel=1
+pkgdesc='ArcOS Operating System Installer'
+url='https://github.com/zcharka/arcos-repo'
+arch=('x86_64')
+license=('GPL-3.0-only')
+
+depends=(
+  'python-gobject'
+  'python-cairo'
+  'gtk4'
+  'libadwaita'
+  'python'
+)
+
+package() {
+    cd "${srcdir}"
+
+    find usr -type f | while IFS= read -r _file; do
+        if [[ "${_file}" == usr/bin/* ]]; then
+            install -Dm755 "${_file}" "${pkgdir}/${_file}"
+        else
+            install -Dm644 "${_file}" "${pkgdir}/${_file}"
+        fi
+    done
+}
