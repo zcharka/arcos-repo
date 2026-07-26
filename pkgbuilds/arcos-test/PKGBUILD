@@ -1,0 +1,11 @@
+pkgname=arcos-test
+pkgver=1.0
+pkgrel=1
+pkgdesc="Pakiet testowy repozytorium ArcOS"
+arch=('any')
+license=('GPL-3.0-or-later')
+
+package() {
+    install -Dm644 /dev/null \
+        "$pkgdir/usr/share/arcos-test/repository-works"
+}
