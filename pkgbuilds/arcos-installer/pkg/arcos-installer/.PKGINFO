@@ -3,12 +3,12 @@
 pkgname = arcos-installer
 pkgbase = arcos-installer
 xdata = pkgtype=pkg
-pkgver = 1.5.8-1
+pkgver = 1.5.9-2
 pkgdesc = ArcOS Operating System Installer
 url = https://github.com/zcharka/arcos-repo
-builddate = 1785097222
+builddate = 1785106324
 packager = Unknown Packager
-size = 1697856
+size = 7321047
 arch = x86_64
 license = GPL-3.0-only
 depend = python-gobject

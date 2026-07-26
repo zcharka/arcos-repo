@@ -71,16 +71,16 @@ class DEPicker(Gtk.Box):
         # Define the two options
         self.options = [
             {
-                "name": "Linexin",
-                "description": "GNOME-based desktop interface",
+                "name": "Normal desktop",
+                "description": "Standard Plasma desktop environment",
                 "icon": "screen1.png",
                 "requires_internet": False
             },
             {
-                "name": "Kinexin",
-                "description": "Plasma-based desktop interface",
+                "name": "Steam Big Picture",
+                "description": "Boot directly into Steam Big Picture",
                 "icon": "screen2.png",
-                "requires_internet": True
+                "requires_internet": False
             }
         ]
         
@@ -118,10 +118,7 @@ class DEPicker(Gtk.Box):
 
         self.append(checkbox_box)
 
-        # Package selections: None means "not customized, use all defaults"
-        self.selected_packages = None
-        self._cached_packages = None
-        self.selected_bootloader = "automatic"
+        # Package selections and bootloader removed from UI
 
         navigation_btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
         navigation_btns.set_halign(Gtk.Align.CENTER)
@@ -356,7 +353,6 @@ class DEPicker(Gtk.Box):
         
         # Write selection to file
         self.write_selection_to_file()
-        self.write_package_selection()
         self.write_bootloader_selection()
         
         if self.on_continue_callback:
@@ -443,69 +439,13 @@ chmod 644 "{config_file_de}" "{config_file_updates}"
                 pass
 
     def write_package_selection(self):
-        """Write the package selection config files for the installation widget."""
-        if self.selected_packages is None:
-            return  # Not customized, use defaults
-
-        config_dir = "/tmp/installer_config"
-        packages = self._get_all_packages()
-
-        # Separate flatpak selections and pacman removals
-        selected_flatpaks = []
-        removed_pacman = []
-        for pkg_id, enabled in self.selected_packages.items():
-            if pkg_id not in packages:
-                continue
-            pkg_type = packages[pkg_id].get("type", "pacman")
-            if pkg_type == "flatpak":
-                if enabled:
-                    selected_flatpaks.append(pkg_id)
-            else:
-                if not enabled:
-                    removed_pacman.append(pkg_id)
-
-        flatpak_data = json.dumps(selected_flatpaks)
-        removal_data = json.dumps(removed_pacman)
-
-        try:
-            if os.path.exists(config_dir):
-                can_write = os.access(config_dir, os.W_OK)
-            else:
-                can_write = os.access(os.path.dirname(config_dir), os.W_OK)
-
-            if can_write:
-                os.makedirs(config_dir, exist_ok=True)
-                with open(os.path.join(config_dir, "selected_packages"), 'w') as f:
-                    f.write(flatpak_data)
-                with open(os.path.join(config_dir, "removed_packages"), 'w') as f:
-                    f.write(removal_data)
-                print(f"DEBUG: Wrote package selection to {config_dir}")
-            else:
-                temp_script = "/tmp/pkg_selection_writer.sh"
-                with open(temp_script, 'w') as f:
-                    f.write(f'#!/bin/bash\nmkdir -p "{config_dir}"\n')
-                    f.write(f"cat > \"{config_dir}/selected_packages\" << 'PKGEOF'\n{flatpak_data}\nPKGEOF\n")
-                    f.write(f"cat > \"{config_dir}/removed_packages\" << 'PKGEOF'\n{removal_data}\nPKGEOF\n")
-                    f.write(f'chmod 644 "{config_dir}/selected_packages" "{config_dir}/removed_packages"\n')
-                os.chmod(temp_script, 0o755)
-                try:
-                    subprocess.run(['pkexec', 'bash', temp_script], capture_output=True, text=True, timeout=30)
-                finally:
-                    try:
-                        os.remove(temp_script)
-                    except:
-                        pass
-        except Exception as e:
-            print(f"ERROR: Failed to write package selection: {e}")
+        pass
 
     def write_bootloader_selection(self):
         """Write selected bootloader mode for bootloader.sh."""
         config_dir = "/tmp/installer_config"
         config_file = os.path.join(config_dir, "bootloader_choice")
-        selection = (self.selected_bootloader or "automatic").strip().lower()
-        valid = {"automatic", "systemd-boot", "grub", "refind"}
-        if selection not in valid:
-            selection = "automatic"
+        selection = "grub"
 
         try:
             if os.path.exists(config_dir):

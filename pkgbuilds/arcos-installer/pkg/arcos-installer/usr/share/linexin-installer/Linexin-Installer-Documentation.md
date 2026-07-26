@@ -1,8 +1,8 @@
-# Linexin Installer Documentation
+# ArcOS Installer Documentation
 
 ## Overview
 
-The **Linexin Installer** is a modern, user-friendly Linux installer built with **Python 3**, **GTK 4**, and **Libadwaita**. It provides a guided step-by-step process to install the Linexin operating system (or other customized distributions) onto a target machine.
+The **ArcOS Installer** is a modern, user-friendly Linux installer built with **Python 3**, **GTK 4**, and **Libadwaita**. It provides a guided step-by-step process to install the Linexin operating system (or other customized distributions) onto a target machine.
 
 ### Key Technologies
 -   **Language**: Python 3

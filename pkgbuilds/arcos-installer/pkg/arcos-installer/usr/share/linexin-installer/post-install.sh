@@ -214,118 +214,64 @@ check_de_selection() {
     local de_value
     de_value=$(cat "$DE_SELECTION_FILE" 2>/dev/null | tr -d '[:space:]')
     
+    print_msg "Installing requested packages: lutris, steam, flatpak..."
+    pacman -Sy lutris steam flatpak --noconfirm || true
+
+    # Install heroic flatpak
+    print_msg "Installing Heroic Games Launcher from flathub..."
+    flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
+    flatpak install -y flathub com.heroicgameslauncher.hgl 2>/dev/null || true
+
+    # Set up Heroic to auto-add games to Steam for the main user
+    local CREATED_USER=$(ls /home/ | grep -v liveuser | head -n 1)
+    if [[ -n "$CREATED_USER" ]]; then
+        print_msg "Configuring Heroic to add games to Steam for user $CREATED_USER..."
+        local HEROIC_CONFIG_DIR="/home/$CREATED_USER/.var/app/com.heroicgameslauncher.hgl/config/heroic/store"
+        mkdir -p "$HEROIC_CONFIG_DIR"
+        # We write a basic config.json to enable addGamesToSteam
+        echo '{"addGamesToSteam": true}' > "$HEROIC_CONFIG_DIR/config.json"
+        chown -R "$CREATED_USER:$CREATED_USER" "/home/$CREATED_USER/.var"
+    fi
+
     if [[ "$de_value" == "0" ]]; then
-        print_msg "DE selection: Linexin"
+        print_msg "DE selection: Normal desktop"
         return 0
     elif [[ "$de_value" == "1" ]]; then
-        print_msg "DE selection: Kinexin"
-        pacman -Sy kinexin-desktop --noconfirm --overwrite '*'
-        pacman -Rsc gnome --noconfirm 
+        print_msg "DE selection: Steam Big Picture"
+        # Enable autologin and start Steam Big Picture
+        if [[ -n "$CREATED_USER" ]]; then
+            print_msg "Setting up Steam Big Picture autostart and autologin for user $CREATED_USER..."
+            local AUTOSTART_DIR="/home/$CREATED_USER/.config/autostart"
+            mkdir -p "$AUTOSTART_DIR"
+            cat <<EOF > "$AUTOSTART_DIR/steam-big-picture.desktop"
+[Desktop Entry]
+Name=Steam Big Picture
+Exec=steam -gamepadui
+Type=Application
+EOF
+            chown -R "$CREATED_USER:$CREATED_USER" "$AUTOSTART_DIR"
+            
+            # Setup GDM autologin
+            mkdir -p /etc/gdm
+            cat <<EOF > /etc/gdm/custom.conf
+[daemon]
+AutomaticLoginEnable=True
+AutomaticLogin=$CREATED_USER
+EOF
+
+            # Setup SDDM autologin
+            mkdir -p /etc/sddm.conf.d
+            cat <<EOF > /etc/sddm.conf.d/autologin.conf
+[Autologin]
+User=$CREATED_USER
+Session=plasma
+EOF
+        fi
         return 0
     else
         print_error "Invalid DE selection value: '$de_value'. Expected 0 or 1"
         return 2
     fi
-}
-
-is_flatpak_selected() {
-    local flatpak_id="$1"
-    # If no explicit selection file exists, treat defaults as selected.
-    if [[ ! -f "/selected_packages" ]]; then
-        return 0
-    fi
-    grep -q "\"${flatpak_id}\"" /selected_packages
-}
-
-is_pacman_removed() {
-    local pkg_id="$1"
-    if [[ ! -f "/removed_packages" ]]; then
-        return 1
-    fi
-    grep -q "\"${pkg_id}\"" /removed_packages
-}
-
-build_kinexin_launchers() {
-    local launchers=()
-
-    # Keep Zen only if selected in Advanced Setup Flatpak choices.
-    if is_flatpak_selected "app.zen_browser.zen"; then
-        launchers+=("applications:app.zen_browser.zen.desktop")
-    fi
-
-    # Core launcher kept always.
-    launchers+=("preferred://filemanager")
-
-    # KDE Discover may be deselected as package.
-    if ! is_pacman_removed "discover" && ! is_pacman_removed "plasma-discover"; then
-        launchers+=("applications:org.kde.discover.desktop")
-    fi
-
-    # Linexin Center may be deselected depending on package naming.
-    if ! is_pacman_removed "linexincenter" && \
-       ! is_pacman_removed "linexin-center" && \
-       ! is_pacman_removed "github.petexy.linexincenter"; then
-        launchers+=("applications:github.petexy.linexincenter.desktop")
-    fi
-
-    # Steam may be deselected in Advanced Setup package list.
-    if ! is_pacman_removed "steam"; then
-        launchers+=("applications:steam.desktop")
-    fi
-
-    local IFS=,
-    echo "${launchers[*]}"
-}
-
-update_plasma_launcher_file() {
-    local cfg_file="$1"
-    local new_launchers="$2"
-    local target_section="[Containments][73][Applets][74][Configuration][General]"
-
-    [[ -f "$cfg_file" ]] || return 0
-
-    awk -v section="$target_section" -v launchers="$new_launchers" '
-    BEGIN {
-        in_target = 0
-    }
-    {
-        if ($0 == section) {
-            in_target = 1
-            print $0
-            next
-        }
-
-        if (in_target == 1 && $0 ~ /^\[/ && $0 != section) {
-            in_target = 0
-        }
-
-        if (in_target == 1 && $0 ~ /^launchers=/) {
-            print "launchers=" launchers
-            next
-        }
-
-        print $0
-    }' "$cfg_file" > "${cfg_file}.tmp" && mv "${cfg_file}.tmp" "$cfg_file"
-}
-
-update_kinexin_plasma_launchers() {
-    local de_value
-    de_value=$(cat "$DE_SELECTION_FILE" 2>/dev/null | tr -d '[:space:]')
-    [[ "$de_value" == "1" ]] || return 0
-
-    local launchers
-    launchers=$(build_kinexin_launchers)
-    print_msg "Updating Kinexin Plasma launchers: $launchers"
-
-    # Apply to /etc/skel for future users.
-    update_plasma_launcher_file "/etc/skel/.config/plasma-org.kde.plasma.desktop-appletsrc" "$launchers"
-
-    # Apply to existing non-live users in /home.
-    for user_home in /home/*; do
-        [[ -d "$user_home" ]] || continue
-        [[ "$user_home" == "/home/liveuser" ]] && continue
-        update_plasma_launcher_file "$user_home/.config/plasma-org.kde.plasma.desktop-appletsrc" "$launchers"
-    done
 }
 
 # Update system packages (only if internet is available)
@@ -371,7 +317,6 @@ if check_internet; then
     fi
     
     check_de_selection
-    update_kinexin_plasma_launchers
 else
     print_warning "No internet connection available, skipping package updates"
     print_warning "You can run 'pacman -Syu' manually later when internet is available"
