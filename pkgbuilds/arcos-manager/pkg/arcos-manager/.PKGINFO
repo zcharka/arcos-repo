@@ -3,10 +3,10 @@
 pkgname = arcos-manager
 pkgbase = arcos-manager
 xdata = pkgtype=pkg
-pkgver = 1.0.0-1
+pkgver = 1.0.0-2
 pkgdesc = ArcOS Package Manager and ISO Builder
 url = https://github.com/zcharka
-builddate = 1785185860
+builddate = 1785186404
 packager = Unknown Packager
 size = 169733
 arch = x86_64
