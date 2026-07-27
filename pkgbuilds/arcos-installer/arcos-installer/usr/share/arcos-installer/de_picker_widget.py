@@ -72,13 +72,13 @@ class DEPicker(Gtk.Box):
         self.options = [
             {
                 "name": "ArcOS",
-                "description": "GNOME-based desktop interface",
+                "description": "Plasma Desktop Environment",
                 "icon": "screen1.png",
                 "requires_internet": False
             },
             {
-                "name": "Kinexin",
-                "description": "Plasma-based desktop interface",
+                "name": "Big Picture",
+                "description": "Plasma-based desktop interface with Steam Big Picture",
                 "icon": "screen2.png",
                 "requires_internet": True
             }
