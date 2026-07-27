@@ -3,10 +3,10 @@
 pkgname = arcos-installer
 pkgbase = arcos-installer
 xdata = pkgtype=pkg
-pkgver = 3.1.2-17
+pkgver = 3.1.2-18
 pkgdesc = Arctis Operating System Installer
 url = https://github.com/zcharka
-builddate = 1785174019
+builddate = 1785175187
 packager = Unknown Packager
 size = 10020754
 arch = x86_64
