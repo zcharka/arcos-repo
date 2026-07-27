@@ -3,12 +3,12 @@
 pkgname = arcos-manager
 pkgbase = arcos-manager
 xdata = pkgtype=pkg
-pkgver = 1.0.0-5
+pkgver = 1.0.0-6
 pkgdesc = ArcOS Package Manager and ISO Builder
 url = https://github.com/zcharka
-builddate = 1785191137
+builddate = 1785193682
 packager = Unknown Packager
-size = 171410
+size = 172169
 arch = x86_64
 license = GPL-3.0
 depend = python-gobject

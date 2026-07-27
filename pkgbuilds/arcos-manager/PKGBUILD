@@ -2,7 +2,7 @@
 
 pkgname=arcos-manager
 pkgver=1.0.0
-pkgrel=5
+pkgrel=6
 pkgdesc='ArcOS Package Manager and ISO Builder'
 url='https://github.com/zcharka'
 arch=('x86_64')

@@ -137,6 +137,11 @@ class ArcManagerWindow(Adw.ApplicationWindow):
             
             GLib.idle_add(self.progress_screen.set_steps, steps)
             
+            def log_msg(msg, tag=None):
+                GLib.idle_add(self.progress_screen.append_log, msg, tag)
+                level = 'ERROR' if tag == 'error' else 'INFO'
+                self.log_manager.log(level, msg.strip())
+            
             step_idx = 0
             results = []
             
@@ -148,7 +153,7 @@ class ArcManagerWindow(Adw.ApplicationWindow):
                 if getattr(self.options_screen, 'auto_pkgrel', True):
                     pkgrel_mgr = PkgrelManager()
                     for pkg in self.selected_packages:
-                        GLib.idle_add(self.progress_screen.append_log, f"Zwiększanie pkgrel dla {pkg.name}...\n", 'info')
+                        log_msg(f"Zwiększanie pkgrel dla {pkg.name}...\n", 'info')
                         pkgrel_mgr.increment_pkgrel(pkg)
                 
                 GLib.idle_add(self.progress_screen.update_step, step_idx, 'done')
@@ -162,17 +167,17 @@ class ArcManagerWindow(Adw.ApplicationWindow):
                     GLib.idle_add(self.progress_screen.set_current_operation, f"Budowanie {pkg.name}")
                     
                     def build_prog(msg):
-                        GLib.idle_add(self.progress_screen.append_log, msg)
+                        log_msg(msg)
                     
                     res = builder.build_package(pkg, build_prog)
                     
                     if res.success:
-                        built_files.append(res.package_file)
-                        GLib.idle_add(self.progress_screen.append_log, res.log, 'success')
+                        built_files.extend(res.package_files)
+                        log_msg(f"{pkg.name} built successfully.\n", 'success')
                         GLib.idle_add(self.progress_screen.update_step, step_idx, 'done')
                         results.append(f"{pkg.name} przebudowano pomyślnie")
                     else:
-                        GLib.idle_add(self.progress_screen.append_log, res.log, 'error')
+                        log_msg(res.log, 'error')
                         GLib.idle_add(self.progress_screen.update_step, step_idx, 'error')
                         GLib.idle_add(self.show_error, "Błąd budowania", res.error)
                         return
@@ -182,8 +187,9 @@ class ArcManagerWindow(Adw.ApplicationWindow):
                 GLib.idle_add(self.progress_screen.update_step, step_idx, 'running')
                 GLib.idle_add(self.progress_screen.set_current_operation, "Aktualizacja repozytorium")
                 repo_mgr = RepoManager()
-                success, repo_log = repo_mgr.update_repo(built_files, lambda m: GLib.idle_add(self.progress_screen.append_log, m))
+                success, repo_log = repo_mgr.update_repo(built_files, lambda m: log_msg(m))
                 if success:
+                    log_msg("Zaktualizowano repozytorium\n", 'success')
                     GLib.idle_add(self.progress_screen.update_step, step_idx, 'done')
                     results.append("Zaktualizowano repozytorium")
                 else:
@@ -231,10 +237,11 @@ class ArcManagerWindow(Adw.ApplicationWindow):
                 iso_builder = ISOBuilder()
                 
                 def iso_prog(msg):
-                    GLib.idle_add(self.progress_screen.append_log, msg)
+                    log_msg(msg)
                 
                 success, iso_path, iso_log = iso_builder.build_iso(iso_prog)
                 if success:
+                    log_msg(f"Zbudowano ISO: {iso_path}\n", 'success')
                     GLib.idle_add(self.progress_screen.update_step, step_idx, 'done')
                     results.append(f"Zbudowano ISO: {os.path.basename(iso_path)}")
                 else:

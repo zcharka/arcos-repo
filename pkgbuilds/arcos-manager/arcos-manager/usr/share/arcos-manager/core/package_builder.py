@@ -11,7 +11,7 @@ REPO_X86_64 = os.path.expanduser('~/Documents/arcos-repo/x86_64')
 class BuildResult:
     package_name: str
     success: bool
-    package_file: str
+    package_files: list
     error: str
     log: str
 
@@ -24,49 +24,62 @@ class PackageBuilder:
         result = BuildResult(
             package_name=package.name,
             success=False,
-            package_file='',
+            package_files=[],
             error='',
             log=''
         )
         
         try:
             # 1. Run makepkg
-            proc = subprocess.run(
+            proc = subprocess.Popen(
                 ['makepkg', '-f', '--noconfirm'],
                 cwd=package.path,
-                capture_output=True,
-                text=True
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
             )
-            result.log = proc.stdout + '\n' + proc.stderr
+            
+            full_log = []
+            for line in iter(proc.stdout.readline, ''):
+                full_log.append(line)
+                if progress_callback:
+                    progress_callback(line)
+            proc.stdout.close()
+            proc.wait()
+            
+            result.log = "".join(full_log)
             if proc.returncode != 0:
                 result.error = "makepkg failed"
                 return result
                 
-            # 2. Find package file
+            # 2. Find package files
             pkg_pattern = os.path.join(package.path, '*.pkg.tar.zst')
             pkg_files = glob.glob(pkg_pattern)
             if not pkg_files:
                 result.error = "Package file not found after build"
                 return result
                 
-            newest_pkg = max(pkg_files, key=os.path.getmtime)
+            # 3. Verify and Copy ALL produced packages
+            dest_files = []
+            for pkg_file in pkg_files:
+                verify_proc = subprocess.run(
+                    ['pacman', '-Qip', pkg_file],
+                    capture_output=True,
+                    text=True
+                )
+                if verify_proc.returncode == 0:
+                    dest = os.path.join(self.repo_x86_64, os.path.basename(pkg_file))
+                    shutil.copy2(pkg_file, dest)
+                    dest_files.append(dest)
+                else:
+                    result.error += f"Package verification failed for {os.path.basename(pkg_file)}\n"
             
-            # 3. Verify
-            verify_proc = subprocess.run(
-                ['pacman', '-Qip', newest_pkg],
-                capture_output=True,
-                text=True
-            )
-            if verify_proc.returncode != 0:
-                result.error = "Package verification failed"
-                return result
-                
-            # 4. Copy to repo
-            dest = os.path.join(self.repo_x86_64, os.path.basename(newest_pkg))
-            shutil.copy2(newest_pkg, dest)
-            
-            result.success = True
-            result.package_file = dest
+            if dest_files:
+                result.success = True
+                result.package_files = dest_files
+            else:
+                result.error = "No packages passed verification\n" + result.error
             
         except Exception as e:
             result.error = str(e)
