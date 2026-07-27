@@ -11,7 +11,7 @@ class ISOBuilder:
         self.work_dir = '/tmp/arcos-iso-work'
 
     def build_iso(self, progress_callback=None) -> Tuple[bool, str, str]:
-        profile_dir = os.path.join(self.repo_root, 'iso-profile') 
+        profile_dir = os.path.expanduser('~/archlive') 
         out_dir = os.path.join(self.repo_root, 'out')
         os.makedirs(out_dir, exist_ok=True)
         
