@@ -1,11 +1,11 @@
 format = 2
 pkgname = arcos-installer
 pkgbase = arcos-installer
-pkgver = 3.1.2-18
+pkgver = 3.1.2-19
 pkgarch = x86_64
-pkgbuild_sha256sum = 64b671c6728d02b7192853249963e9fc59c858abdb5f517f1e7f5daa4bdc03dc
+pkgbuild_sha256sum = 0dcfd6b4990e7e43a4b2447a82b9d03e23d117fcd05944e947f49af4a9dbd537
 packager = Unknown Packager
-builddate = 1785175187
+builddate = 1785183652
 builddir = /home/Sebastian/Documents/arcos-repo/pkgbuilds/arcos-installer
 startdir = /home/Sebastian/Documents/arcos-repo/pkgbuilds/arcos-installer
 buildtool = makepkg

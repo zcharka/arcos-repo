@@ -156,7 +156,24 @@ mv /etc/skel/.zshrc_postinstall /etc/skel/.zshrc 2>/dev/null || true
 cp /usr/share/refind/icons/os_arcos.png /boot/vmlinuz-linux.png 2>/dev/null || true
 mv /etc/os-release /usr/lib/os-release 2>/dev/null || true
 ln -sf /usr/lib/os-release /etc/os-release 2>/dev/null || true
-mv /etc/mkinitcpio.d/linux-postinstall.preset /etc/mkinitcpio.d/linux.preset 2>/dev/null || true
+cat << 'EOF' > /etc/mkinitcpio.d/linux.preset
+# mkinitcpio preset file for the 'linux' package
+
+ALL_config="/etc/mkinitcpio.conf"
+ALL_kver="/boot/vmlinuz-linux"
+
+PRESETS=('default' 'fallback')
+
+#default_config="/etc/mkinitcpio.conf"
+default_image="/boot/initramfs-linux.img"
+#default_uki="/efi/EFI/Linux/arch-linux.efi"
+#default_options=""
+
+#fallback_config="/etc/mkinitcpio.conf"
+fallback_image="/boot/initramfs-linux-fallback.img"
+#fallback_uki="/efi/EFI/Linux/arch-linux-fallback.efi"
+fallback_options="-S autodetect"
+EOF
 mv /usr/share/pixmaps/archlinux-logo-text-dark-postinstall.svg /usr/share/pixmaps/archlinux-logo-text-dark.svg
 mv /usr/share/pixmaps/archlinux-logo-text-postinstall.svg /usr/share/pixmaps/archlinux-logo-text.svg
 
@@ -380,7 +397,7 @@ fi
 
 
 # Regenerate initramfs
-mkinitcpio -P 2>/dev/null || true
+mkinitcpio -P
 
 flatpak override --filesystem=xdg-config/gtk-4.0:ro
 flatpak override --filesystem=xdg-config/gtk-3.0:ro

@@ -134,6 +134,20 @@ class UserCreationWidget(Gtk.Box):
         self.fullname_entry.connect("changed", self.validate_fields)
         fullname_box.append(self.fullname_entry)
         
+        # Strong password toggle
+        strong_password_toggle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        user_section.append(strong_password_toggle_box)
+        
+        strong_password_label = Gtk.Label(label="Require Strong Password", xalign=0, hexpand=True)
+        strong_password_label.set_markup('<b>Wymagaj silnego hasła (Require Strong Password)</b>')
+        strong_password_toggle_box.append(strong_password_label)
+        
+        self.strong_password_switch = Gtk.Switch()
+        self.strong_password_switch.set_valign(Gtk.Align.CENTER)
+        self.strong_password_switch.set_active(False)
+        self.strong_password_switch.connect("notify::active", self.on_strong_password_toggled)
+        strong_password_toggle_box.append(self.strong_password_switch)
+        
         # Password field
         password_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         user_section.append(password_box)
@@ -300,6 +314,10 @@ class UserCreationWidget(Gtk.Box):
         self.validate_fields()
         get_localization_manager().update_widget_tree(self)
     
+    def on_strong_password_toggled(self, switch, param):
+        """Handle strong password toggle."""
+        self.validate_fields()
+    
     def on_root_toggled(self, switch, param):
         """Handle root account toggle."""
         self.root_enabled = switch.get_active()
@@ -455,6 +473,9 @@ class UserCreationWidget(Gtk.Box):
         else:
             strength_text, strength_level = self.check_password_strength(user_password)
             self.password_strength.set_markup(strength_text)
+            if self.strong_password_switch.get_active() and strength_level < 4:
+                self.validation_errors.add("weak_password")
+                all_valid = False
         
         # Check user password match - FIXED LOGIC
         if user_password and repeat_password:
@@ -493,6 +514,9 @@ class UserCreationWidget(Gtk.Box):
             else:
                 strength_text, strength_level = self.check_password_strength(root_password)
                 self.root_password_strength.set_markup(strength_text)
+                if self.strong_password_switch.get_active() and strength_level < 4:
+                    self.validation_errors.add("weak_root_password")
+                    all_valid = False
             
             # Check root password match - FIXED LOGIC
             if root_password and repeat_root_password:

@@ -71,14 +71,14 @@ class DEPicker(Gtk.Box):
         # Define the two options
         self.options = [
             {
-                "name": "ArcOS",
-                "description": "Plasma Desktop Environment",
+                "name": "Pure plasma",
+                "description": "Czysta plasma. Zainstalowany steam, discord, lutris oraz heroic games launcher",
                 "icon": "screen1.png",
                 "requires_internet": False
             },
             {
                 "name": "Big Picture",
-                "description": "Plasma-based desktop interface with Steam Big Picture",
+                "description": "konsolowy ekran steama. Gry zainstalowane w Heroic Games Launcher automatycznie trafią na steam. Jest opcja przełączenia w zwykły pulpit",
                 "icon": "screen2.png",
                 "requires_internet": True
             }

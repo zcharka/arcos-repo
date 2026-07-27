@@ -1052,7 +1052,7 @@ class InstallationWidget(Gtk.Box):
         
         steps.append(InstallationStep(
             label="Removing live ISO fstab",
-            command=["sudo", "rm", "-f", "/etc/fstab"],
+            command=["sudo", "rm", "-f", "/tmp/arcos_installer/root/etc/fstab"],
             description="Removing the live ISO filesystem configuration",
             weight=0.1,
             critical=False
