@@ -7,6 +7,7 @@ from .common import create_pill_button, create_entrance_animation
 class SuccessScreen(Gtk.Box):
     __gsignals__ = {
         'done-clicked': (GObject.SignalFlags.RUN_FIRST, None, ()),
+        'open-log-clicked': (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
 
     def __init__(self, **kwargs):
@@ -44,6 +45,7 @@ class SuccessScreen(Gtk.Box):
         btn_box.set_margin_top(20)
         
         self.btn_log = create_pill_button("Otwórz log", 'back_button')
+        self.btn_log.connect('clicked', lambda _: self.emit('open-log-clicked'))
         
         self.btn_done = create_pill_button("Gotowe", 'animated_button')
         self.btn_done.add_css_class('suggested-action')

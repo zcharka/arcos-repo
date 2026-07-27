@@ -7,6 +7,7 @@ from .common import create_pill_button
 class ErrorScreen(Gtk.Box):
     __gsignals__ = {
         'back-clicked': (GObject.SignalFlags.RUN_FIRST, None, ()),
+        'open-log-clicked': (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
 
     def __init__(self, **kwargs):
@@ -59,6 +60,7 @@ class ErrorScreen(Gtk.Box):
         btn_box.set_margin_top(20)
         
         self.btn_log = create_pill_button("Otwórz log", 'back_button')
+        self.btn_log.connect('clicked', lambda _: self.emit('open-log-clicked'))
         
         self.btn_back = create_pill_button("Wróć", 'continue_button')
         self.btn_back.add_css_class('suggested-action')

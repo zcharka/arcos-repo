@@ -70,11 +70,13 @@ class ArcManagerWindow(Adw.ApplicationWindow):
         # 2. Package List Screen
         self.package_list = PackageListScreen()
         self.package_list.connect('packages-selected', self.on_packages_selected)
+        self.package_list.connect('back-clicked', lambda _: self.stack.set_visible_child_name('welcome'))
         self.stack.add_named(self.package_list, 'package_list')
         
         # 3. Options Screen
         self.options_screen = OptionsScreen()
         self.options_screen.connect('start-operation', self.on_start_operation)
+        self.options_screen.connect('back-clicked', lambda _: self.stack.set_visible_child_name('package_list' if self.current_mode != 'iso' else 'welcome'))
         self.stack.add_named(self.options_screen, 'options')
         
         # 4. Progress Screen
@@ -85,11 +87,13 @@ class ArcManagerWindow(Adw.ApplicationWindow):
         # 5. Success Screen
         self.success_screen = SuccessScreen()
         self.success_screen.connect('done-clicked', lambda _: self.close())
+        self.success_screen.connect('open-log-clicked', lambda _: self.log_manager.open_log_in_editor())
         self.stack.add_named(self.success_screen, 'success')
         
         # 6. Error Screen
         self.error_screen = ErrorScreen()
         self.error_screen.connect('back-clicked', lambda _: self.stack.set_visible_child_name('welcome'))
+        self.error_screen.connect('open-log-clicked', lambda _: self.log_manager.open_log_in_editor())
         self.stack.add_named(self.error_screen, 'error')
         
         self.stack.set_visible_child_name('welcome')
@@ -127,6 +131,7 @@ class ArcManagerWindow(Adw.ApplicationWindow):
                     steps.append(f'Budowanie {pkg.name}')
                 steps.append('Aktualizacja repozytorium')
                 steps.append('Commitowanie zmian')
+                steps.append('Wysyłanie na serwer (push)')
             if mode in ['iso', 'full'] and (mode == 'iso' or getattr(self.options_screen, 'build_iso_after', False)):
                 steps.append('Budowanie obrazu ISO')
             
@@ -203,6 +208,19 @@ class ArcManagerWindow(Adw.ApplicationWindow):
                 
                 GLib.idle_add(self.progress_screen.update_step, step_idx, 'done')
                 results.append("Utworzono git commit")
+                step_idx += 1
+                
+                # Git Push
+                GLib.idle_add(self.progress_screen.update_step, step_idx, 'running')
+                GLib.idle_add(self.progress_screen.set_current_operation, "Wysyłanie na serwer...")
+                push_success, push_log = git_mgr.git_push()
+                if push_success:
+                    GLib.idle_add(self.progress_screen.update_step, step_idx, 'done')
+                    results.append("Wysłano zmiany na GitHub")
+                else:
+                    GLib.idle_add(self.progress_screen.update_step, step_idx, 'error')
+                    GLib.idle_add(self.show_error, "Błąd wysyłania (git push)", push_log)
+                    return
                 step_idx += 1
             
             # --- ISO MODE ---

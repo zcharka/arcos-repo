@@ -7,6 +7,7 @@ from .common import create_pill_button
 class OptionsScreen(Gtk.Box):
     __gsignals__ = {
         'start-operation': (GObject.SignalFlags.RUN_FIRST, None, ()),
+        'back-clicked': (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
 
     def __init__(self, **kwargs):
@@ -47,6 +48,7 @@ class OptionsScreen(Gtk.Box):
         btn_box.set_halign(Gtk.Align.CENTER)
         
         self.btn_back = create_pill_button("Wróć", 'back_button')
+        self.btn_back.connect('clicked', lambda _: self.emit('back-clicked'))
         self.btn_start = create_pill_button("Rozpocznij", 'continue_button')
         self.btn_start.add_css_class('suggested-action')
         self.btn_start.connect('clicked', lambda x: self.emit('start-operation'))

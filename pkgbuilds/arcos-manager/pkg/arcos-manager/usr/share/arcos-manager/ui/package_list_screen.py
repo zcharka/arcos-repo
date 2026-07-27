@@ -7,6 +7,7 @@ from .common import create_pill_button
 class PackageListScreen(Gtk.Box):
     __gsignals__ = {
         'packages-selected': (GObject.SignalFlags.RUN_FIRST, None, (object,)),
+        'back-clicked': (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
 
     def __init__(self, **kwargs):
@@ -16,6 +17,7 @@ class PackageListScreen(Gtk.Box):
         
         self.packages = []
         self.selected = set()
+        self.check_buttons = []
         
         # Title
         title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -63,6 +65,7 @@ class PackageListScreen(Gtk.Box):
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         btn_box.set_halign(Gtk.Align.CENTER)
         self.btn_back = create_pill_button("Wróć", 'back_button')
+        self.btn_back.connect('clicked', lambda _: self.emit('back-clicked'))
         self.btn_next = create_pill_button("Dalej", 'continue_button')
         self.btn_next.add_css_class('suggested-action')
         self.btn_next.set_sensitive(False)
@@ -88,6 +91,7 @@ class PackageListScreen(Gtk.Box):
     def set_packages(self, packages: list):
         self.packages = packages
         self.selected.clear()
+        self.check_buttons.clear()
         
         # Clear listbox
         while child := self.listbox.get_first_child():
@@ -107,6 +111,7 @@ class PackageListScreen(Gtk.Box):
             check = Gtk.CheckButton()
             check.connect('toggled', self._on_check_toggled, pkg)
             row.add_prefix(check)
+            self.check_buttons.append(check)
             
             status = Gtk.Label(label="Gotowa")
             status.add_css_class('status-ready')
@@ -131,20 +136,12 @@ class PackageListScreen(Gtk.Box):
         self.btn_next.set_sensitive(len(self.selected) > 0)
 
     def _on_select_all(self, button):
-        child = self.listbox.get_first_child()
-        while child:
-            check = child.get_prefix()
-            if isinstance(check, Gtk.CheckButton):
-                check.set_active(True)
-            child = child.get_next_sibling()
+        for check in self.check_buttons:
+            check.set_active(True)
 
     def _on_deselect_all(self, button):
-        child = self.listbox.get_first_child()
-        while child:
-            check = child.get_prefix()
-            if isinstance(check, Gtk.CheckButton):
-                check.set_active(False)
-            child = child.get_next_sibling()
+        for check in self.check_buttons:
+            check.set_active(False)
 
     def _on_next_clicked(self, btn):
         self.emit('packages-selected', self.get_selected_packages())

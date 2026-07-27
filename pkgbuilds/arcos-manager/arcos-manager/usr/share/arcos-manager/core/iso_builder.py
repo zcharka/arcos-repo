@@ -15,7 +15,7 @@ class ISOBuilder:
         out_dir = os.path.join(self.repo_root, 'out')
         os.makedirs(out_dir, exist_ok=True)
         
-        cmd = ['pkexec', 'arcos-manager-helper', 'mkarchiso', '-v', '-w', self.work_dir, '-o', out_dir, profile_dir]
+        cmd = ['pkexec', '/usr/share/arcos-manager/arcos-manager-helper', 'mkarchiso', '-v', '-w', self.work_dir, '-o', out_dir, profile_dir]
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True)
             log = proc.stdout + '\n' + proc.stderr
@@ -32,7 +32,7 @@ class ISOBuilder:
             return False, '', str(e)
 
     def clean_work_dirs(self) -> bool:
-        cmd = ['pkexec', 'arcos-manager-helper', 'clean-work']
+        cmd = ['pkexec', '/usr/share/arcos-manager/arcos-manager-helper', 'clean-work']
         proc = subprocess.run(cmd, capture_output=True)
         return proc.returncode == 0
 
