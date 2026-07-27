@@ -1,11 +1,11 @@
 format = 2
 pkgname = arcos-test
 pkgbase = arcos-test
-pkgver = 1.0-2
+pkgver = 1.0-3
 pkgarch = any
-pkgbuild_sha256sum = f9ee331b28c567c07e1bf89a31469b54db0e6bc7cbef1084c87dbf1e8b419a18
+pkgbuild_sha256sum = 6f20b7f56842cc50ef74c8778de2d94a1a5277ec7b25afb2246a6433695306f3
 packager = Unknown Packager
-builddate = 1785186403
+builddate = 1785186541
 builddir = /home/Sebastian/Documents/arcos-repo/pkgbuilds/arcos-test
 startdir = /home/Sebastian/Documents/arcos-repo/pkgbuilds/arcos-test
 buildtool = makepkg
