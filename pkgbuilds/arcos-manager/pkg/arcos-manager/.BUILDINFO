@@ -1,11 +1,11 @@
 format = 2
 pkgname = arcos-manager
 pkgbase = arcos-manager
-pkgver = 1.0.0-6
+pkgver = 1.0.0-7
 pkgarch = x86_64
-pkgbuild_sha256sum = 49b4a6fefc5525da7bdcda7316f8325a6ed28f2c4c3b13a55aec2b9f6fa51e5f
+pkgbuild_sha256sum = 2065100763e2c379ee25d20067f062b7172a08f56d2a6e6bdb0298d39bb6f241
 packager = Unknown Packager
-builddate = 1785193682
+builddate = 1785194458
 builddir = /home/Sebastian/Documents/arcos-repo/pkgbuilds/arcos-manager
 startdir = /home/Sebastian/Documents/arcos-repo/pkgbuilds/arcos-manager
 buildtool = makepkg

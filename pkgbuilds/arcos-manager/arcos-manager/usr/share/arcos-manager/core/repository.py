@@ -13,8 +13,11 @@ class RepoManager:
     def update_repo(self, package_files: List[str], progress_callback=None) -> Tuple[bool, str]:
         if not package_files:
             return True, "No packages to update."
-            
-        cmd = ['repo-add', self.db_path] + package_files
+        
+        # repo-add needs relative paths when cwd is set to the repo dir
+        basenames = [os.path.basename(f) for f in package_files]
+        db_name = os.path.basename(self.db_path)
+        cmd = ['repo-add', db_name] + basenames
         try:
             proc = subprocess.run(
                 cmd,
