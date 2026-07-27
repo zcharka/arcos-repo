@@ -6,7 +6,7 @@ xdata = pkgtype=pkg
 pkgver = 1.0.0-1
 pkgdesc = ArcOS Package Manager and ISO Builder
 url = https://github.com/zcharka
-builddate = 1785185450
+builddate = 1785185860
 packager = Unknown Packager
 size = 169733
 arch = x86_64
