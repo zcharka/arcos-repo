@@ -1,9 +1,9 @@
-# ArcOS Installer
+# Linexin Installer
 <p align="center">
   <img src="https://i.ibb.co/fdtKjBFg/github-petexy-linexininstaller.png" alt="logo" with="200" height="200"/>
 </p>
 
-The ArcOS Installer is a modern, user-friendly graphical installation tool for ArcOS, an Arch Linux-based distribution. It can be modified to support other distributions. Built with GTK4 and libadwaita, it provides a streamlined installation experience with features including:
+The Linexin Installer is a modern, user-friendly graphical installation tool for Linexin, an Arch Linux-based distribution. It can be modified to support other distributions. Built with GTK4 and libadwaita, it provides a streamlined installation experience with features including:
 
     ✨ Multi-language Support - Live UI translation
     🗺️ Interactive Timezone Selection - Fully offline world map with city selection
@@ -12,8 +12,6 @@ The ArcOS Installer is a modern, user-friendly graphical installation tool for A
     📊 Real-time Progress Tracking - Detailed logging and status updates
     🎨 Modern UI Design - Smooth animations and responsive layout
     🔧 Extensible Architecture - Easy to add custom widgets
-    
-This installer is modificated from Linexin Installer
 
 More information and documentation is present here:
 https://github.com/Petexy/linexin-installer/wiki

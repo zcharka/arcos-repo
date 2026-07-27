@@ -1,13 +1,12 @@
-# Maintainer: Zcharka <zcharkayt@gmail.com>, fork of Linexin Installer
+# Maintainer: Petexy <https://github.com/Petexy>
 
 pkgname=arcos-installer
-pkgver=1.6.0
+pkgver=3.1.0
 pkgrel=3
-pkgdesc='ArcOS Operating System Installer'
-url='https://github.com/zcharka/arcos-repo'
+pkgdesc='Arctis Operating System Installer'
+url='https://github.com/zcharka'
 arch=('x86_64')
-license=('GPL-3.0-only')
-
+license=('GPL-3.0')
 depends=(
   'python-gobject'
   'python-cairo'
