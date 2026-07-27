@@ -16,5 +16,3 @@ W README wyrenderuje się wtedy jako:
 > ```bash
 > sudo pacman -Sy
 > ```
-
-**Ważne:** jeśli tworzysz README na GitHubie, nie wkładaj tych potrójnych backticków do backticków, które pokazują sam kod README — wtedy GitHub może je potraktować jako zakończenie bloku.
