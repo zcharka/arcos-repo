@@ -1,0 +1,38 @@
+# Maintainer: Petexy <https://github.com/Petexy>
+
+pkgname=arcos-manager
+pkgver=1.0.0
+pkgrel=1
+pkgdesc='ArcOS Package Manager and ISO Builder'
+url='https://github.com/zcharka'
+arch=('x86_64')
+license=('GPL-3.0')
+depends=(
+  'python-gobject'
+  'python-cairo'
+  'gtk4'
+  'libadwaita'
+  'python'
+  'pacman'
+  'git'
+)
+optdepends=(
+  'archiso: ISO building support'
+  'polkit: Privileged operations'
+)
+
+package() {
+    cd "${startdir}/arcos-manager"
+
+    find usr -type f | while IFS= read -r _file; do
+        if [[ "${_file}" == usr/bin/* ]]; then
+            install -Dm755 "${_file}" "${pkgdir}/${_file}"
+        else
+            install -Dm644 "${_file}" "${pkgdir}/${_file}"
+        fi
+    done
+
+    # Make main script executable
+    chmod 755 "${pkgdir}/usr/share/arcos-manager/manager"
+    chmod 755 "${pkgdir}/usr/share/arcos-manager/arcos-manager-helper"
+}

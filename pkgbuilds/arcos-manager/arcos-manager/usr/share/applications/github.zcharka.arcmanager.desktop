@@ -1,0 +1,10 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Name=Arc Manager
+Comment=Manage ArcOS packages and build system images
+Exec=python /usr/share/arcos-manager/manager
+Icon=/usr/share/arcos-manager/images/logo.svg
+Terminal=false
+Type=Application
+Categories=GTK;System;ArcOS;Adwaita;
+StartupNotify=false

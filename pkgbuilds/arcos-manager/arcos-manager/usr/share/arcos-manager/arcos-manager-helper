@@ -1,0 +1,8 @@
+#!/bin/bash
+# ArcOS Manager Root Helper
+# Only allows specific operations via pkexec
+case "$1" in
+  mkarchiso) shift; exec mkarchiso "$@" ;;
+  clean-work) rm -rf /tmp/arcos-iso-work ;;
+  *) echo "Unknown operation: $1" >&2; exit 1 ;;
+esac

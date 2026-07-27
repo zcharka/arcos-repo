@@ -1,0 +1,304 @@
+#!/usr/bin/env python3
+
+import gi
+import os
+import sys
+
+gi.require_version('Gtk', '4.0')
+gi.require_version('Adw', '1')
+from gi.repository import Gtk, Gdk, Adw, GLib, Gio
+
+# Add the parent directory to sys.path so we can import our modules
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+from ui.common import setup_arc_manager_css
+from ui.welcome_screen import WelcomeScreen
+from ui.package_list_screen import PackageListScreen
+from ui.options_screen import OptionsScreen
+from ui.progress_screen import ProgressScreen
+from ui.success_screen import SuccessScreen
+from ui.error_screen import ErrorScreen
+
+from core.package_discovery import PackageDiscovery
+from core.package_builder import PackageBuilder
+from core.pkgrel import PkgrelManager
+from core.git_ops import GitManager
+from core.repository import RepoManager
+from core.iso_builder import ISOBuilder
+from helpers.logging_helper import LogManager
+
+class ArcManagerWindow(Adw.ApplicationWindow):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.set_title("Arc Manager")
+        self.set_default_size(1000, 700)
+        
+        # Create core managers
+        self.log_manager = LogManager()
+        self.log_manager.start_session()
+        self.pkg_discovery = PackageDiscovery()
+        
+        # Main layout
+        self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.set_content(self.main_box)
+        
+        # Header bar
+        self.header = Adw.HeaderBar()
+        self.main_box.append(self.header)
+        
+        # Stack for navigation
+        self.stack = Gtk.Stack()
+        self.stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+        self.stack.set_transition_duration(300)
+        self.stack.set_vexpand(True)
+        self.main_box.append(self.stack)
+        
+        self.setup_screens()
+        
+        # Application state
+        self.current_mode = None
+        self.selected_packages = []
+        
+    def setup_screens(self):
+        # 1. Welcome Screen
+        self.welcome_screen = WelcomeScreen()
+        self.welcome_screen.connect('mode-selected', self.on_mode_selected)
+        self.stack.add_named(self.welcome_screen, 'welcome')
+        
+        # 2. Package List Screen
+        self.package_list = PackageListScreen()
+        self.package_list.connect('packages-selected', self.on_packages_selected)
+        self.stack.add_named(self.package_list, 'package_list')
+        
+        # 3. Options Screen
+        self.options_screen = OptionsScreen()
+        self.options_screen.connect('start-operation', self.on_start_operation)
+        self.stack.add_named(self.options_screen, 'options')
+        
+        # 4. Progress Screen
+        self.progress_screen = ProgressScreen()
+        self.progress_screen.connect('operation-complete', self.on_operation_complete)
+        self.stack.add_named(self.progress_screen, 'progress')
+        
+        # 5. Success Screen
+        self.success_screen = SuccessScreen()
+        self.success_screen.connect('done-clicked', lambda _: self.close())
+        self.stack.add_named(self.success_screen, 'success')
+        
+        # 6. Error Screen
+        self.error_screen = ErrorScreen()
+        self.error_screen.connect('back-clicked', lambda _: self.stack.set_visible_child_name('welcome'))
+        self.stack.add_named(self.error_screen, 'error')
+        
+        self.stack.set_visible_child_name('welcome')
+
+    def on_mode_selected(self, widget, mode):
+        self.current_mode = mode
+        self.options_screen.mode = mode
+        
+        if mode == 'iso':
+            self.stack.set_visible_child_name('options')
+        else:
+            packages = self.pkg_discovery.scan_packages()
+            self.package_list.set_packages(packages)
+            self.stack.set_visible_child_name('package_list')
+
+    def on_packages_selected(self, widget, selected_packages):
+        self.selected_packages = selected_packages
+        self.stack.set_visible_child_name('options')
+
+    def on_start_operation(self, widget):
+        self.stack.set_visible_child_name('progress')
+        # Start async operation
+        import threading
+        thread = threading.Thread(target=self.run_operation_thread)
+        thread.daemon = True
+        thread.start()
+
+    def run_operation_thread(self):
+        try:
+            mode = self.current_mode
+            steps = []
+            if mode in ['publish', 'full']:
+                steps.append('Przygotowywanie pakietów')
+                for pkg in self.selected_packages:
+                    steps.append(f'Budowanie {pkg.name}')
+                steps.append('Aktualizacja repozytorium')
+                steps.append('Commitowanie zmian')
+            if mode in ['iso', 'full'] and (mode == 'iso' or getattr(self.options_screen, 'build_iso_after', False)):
+                steps.append('Budowanie obrazu ISO')
+            
+            GLib.idle_add(self.progress_screen.set_steps, steps)
+            
+            step_idx = 0
+            results = []
+            
+            # --- PUBLISH / FULL MODE ---
+            if mode in ['publish', 'full']:
+                GLib.idle_add(self.progress_screen.update_step, step_idx, 'running')
+                
+                # Pkgrel increment
+                if getattr(self.options_screen, 'auto_pkgrel', True):
+                    pkgrel_mgr = PkgrelManager()
+                    for pkg in self.selected_packages:
+                        GLib.idle_add(self.progress_screen.append_log, f"Zwiększanie pkgrel dla {pkg.name}...\n", 'info')
+                        pkgrel_mgr.increment_pkgrel(pkg)
+                
+                GLib.idle_add(self.progress_screen.update_step, step_idx, 'done')
+                step_idx += 1
+                
+                # Build packages
+                builder = PackageBuilder()
+                built_files = []
+                for pkg in self.selected_packages:
+                    GLib.idle_add(self.progress_screen.update_step, step_idx, 'running')
+                    GLib.idle_add(self.progress_screen.set_current_operation, f"Budowanie {pkg.name}")
+                    
+                    def build_prog(msg):
+                        GLib.idle_add(self.progress_screen.append_log, msg)
+                    
+                    res = builder.build_package(pkg, build_prog)
+                    
+                    if res.success:
+                        built_files.append(res.package_file)
+                        GLib.idle_add(self.progress_screen.append_log, res.log, 'success')
+                        GLib.idle_add(self.progress_screen.update_step, step_idx, 'done')
+                        results.append(f"{pkg.name} przebudowano pomyślnie")
+                    else:
+                        GLib.idle_add(self.progress_screen.append_log, res.log, 'error')
+                        GLib.idle_add(self.progress_screen.update_step, step_idx, 'error')
+                        GLib.idle_add(self.show_error, "Błąd budowania", res.error)
+                        return
+                    step_idx += 1
+                
+                # Update Repository
+                GLib.idle_add(self.progress_screen.update_step, step_idx, 'running')
+                GLib.idle_add(self.progress_screen.set_current_operation, "Aktualizacja repozytorium")
+                repo_mgr = RepoManager()
+                success, repo_log = repo_mgr.update_repo(built_files, lambda m: GLib.idle_add(self.progress_screen.append_log, m))
+                if success:
+                    GLib.idle_add(self.progress_screen.update_step, step_idx, 'done')
+                    results.append("Zaktualizowano repozytorium")
+                else:
+                    GLib.idle_add(self.progress_screen.update_step, step_idx, 'error')
+                    GLib.idle_add(self.show_error, "Błąd repozytorium", repo_log)
+                    return
+                step_idx += 1
+                
+                # Git Commit
+                GLib.idle_add(self.progress_screen.update_step, step_idx, 'running')
+                GLib.idle_add(self.progress_screen.set_current_operation, "Zatwierdzanie zmian")
+                git_mgr = GitManager()
+                
+                # Remove nested .git if exist
+                nested = git_mgr.check_nested_git([p.path for p in self.selected_packages])
+                for n in nested:
+                    git_mgr.remove_nested_git(n)
+                
+                git_mgr.git_add_all()
+                commit_msg = getattr(self.options_screen, 'commit_message', 'Update ArcOS packages')
+                git_mgr.git_commit(commit_msg)
+                
+                GLib.idle_add(self.progress_screen.update_step, step_idx, 'done')
+                results.append("Utworzono git commit")
+                step_idx += 1
+            
+            # --- ISO MODE ---
+            build_iso = mode == 'iso' or (mode == 'full' and getattr(self.options_screen, 'build_iso_after', False))
+            if build_iso:
+                GLib.idle_add(self.progress_screen.update_step, step_idx, 'running')
+                GLib.idle_add(self.progress_screen.set_current_operation, "Budowanie obrazu ISO (może potrwać kilka minut)")
+                iso_builder = ISOBuilder()
+                
+                def iso_prog(msg):
+                    GLib.idle_add(self.progress_screen.append_log, msg)
+                
+                success, iso_path, iso_log = iso_builder.build_iso(iso_prog)
+                if success:
+                    GLib.idle_add(self.progress_screen.update_step, step_idx, 'done')
+                    results.append(f"Zbudowano ISO: {os.path.basename(iso_path)}")
+                else:
+                    GLib.idle_add(self.progress_screen.update_step, step_idx, 'error')
+                    GLib.idle_add(self.show_error, "Błąd budowania ISO", iso_log)
+                    return
+                step_idx += 1
+            
+            GLib.idle_add(self.progress_screen.set_current_operation, "Gotowe")
+            GLib.idle_add(self.progress_screen.set_progress, 1.0)
+            
+            # Show success screen
+            GLib.idle_add(self.show_success, results)
+                
+        except Exception as e:
+            import traceback
+            err = traceback.format_exc()
+            GLib.idle_add(self.show_error, "Nieoczekiwany błąd", err)
+
+    def show_error(self, title, details):
+        self.error_screen.set_error(title, details, self.log_manager.get_log_path())
+        self.stack.set_visible_child_name('error')
+        
+    def show_success(self, results):
+        self.success_screen.set_results(
+            "Operacja zakończona",
+            "Wszystkie wybrane zadania zostały wykonane pomyślnie.",
+            results,
+            self.log_manager.get_log_path()
+        )
+        self.stack.set_visible_child_name('success')
+
+    def on_operation_complete(self, widget, success, msg):
+        pass
+
+
+class ArcManagerApplication(Adw.Application):
+    def __init__(self):
+        super().__init__(application_id='github.zcharka.arcmanager')
+        
+    def do_startup(self):
+        Adw.Application.do_startup(self)
+        
+        # Make the style dark
+        style_manager = Adw.StyleManager.get_default()
+        style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+        
+        # Load CSS
+        setup_arc_manager_css()
+        self.load_custom_theme()
+        
+    def load_custom_theme(self):
+        # Try to load colors.css and gtk.css from gtk-4.0-no-glass just like installer
+        css_dir = os.path.join(os.path.dirname(__file__), 'gtk-4.0-no-glass')
+        colors_css = os.path.join(css_dir, 'colors.css')
+        gtk_css = os.path.join(css_dir, 'gtk.css')
+        
+        if os.path.exists(colors_css):
+            provider = Gtk.CssProvider()
+            provider.load_from_path(colors_css)
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(),
+                provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+            
+        if os.path.exists(gtk_css):
+            provider2 = Gtk.CssProvider()
+            provider2.load_from_path(gtk_css)
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(),
+                provider2,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+    def do_activate(self):
+        win = self.props.active_window
+        if not win:
+            win = ArcManagerWindow(application=self)
+        win.present()
+
+if __name__ == '__main__':
+    app = ArcManagerApplication()
+    exit_status = app.run(sys.argv)
+    sys.exit(exit_status)
