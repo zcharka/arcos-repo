@@ -1,8 +1,8 @@
 # Maintainer: Petexy <https://github.com/Petexy>
 
 pkgname=arcos-installer
-pkgver=3.1.1
-pkgrel=4
+pkgver=3.1.2
+pkgrel=11
 pkgdesc='Arctis Operating System Installer'
 url='https://github.com/zcharka'
 arch=('x86_64')
@@ -16,7 +16,7 @@ depends=(
 )
 
 package() {
-    cd "${srcdir}"
+    cd "${startdir}/arcos-installer"
 
     find usr -type f | while IFS= read -r _file; do
         if [[ "${_file}" == usr/bin/* ]]; then
