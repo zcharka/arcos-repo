@@ -1,6 +1,6 @@
 pkgname=arcos-test
 pkgver=1.0
-pkgrel=3
+pkgrel=4
 pkgdesc="Pakiet testowy repozytorium ArcOS"
 arch=('any')
 license=('GPL-3.0-or-later')

@@ -2,7 +2,7 @@
 
 pkgname=arcos-installer
 pkgver=3.1.3
-pkgrel=23
+pkgrel=24
 pkgdesc='Arctis Operating System Installer'
 url='https://github.com/zcharka'
 arch=('x86_64')
