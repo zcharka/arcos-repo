@@ -3,7 +3,7 @@
 pkgname=gamescope-session-git
 _gitdir=gamescope-session
 pkgver=r339.b5c2d0d
-pkgrel=2
+pkgrel=3
 pkgdesc="Common gamescope session files"
 arch=('any')
 url="https://github.com/OpenGamingCollective/${_gitdir}"

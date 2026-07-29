@@ -3,10 +3,10 @@
 pkgname = arcos-test
 pkgbase = arcos-test
 xdata = pkgtype=pkg
-pkgver = 1.0-4
+pkgver = 1.0-5
 pkgdesc = Pakiet testowy repozytorium ArcOS
 url = 
-builddate = 1785249544
+builddate = 1785339190
 packager = Unknown Packager
 size = 0
 arch = any
