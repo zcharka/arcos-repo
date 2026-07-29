@@ -1,8 +1,5 @@
+**How to add repository**
 
-W README wyrenderuje się wtedy jako:
-
-> **How to add repository**
->
 > 1. Open `/etc/pacman.conf` and add at the end of the file:
 >
 > ```ini
