@@ -1,8 +1,8 @@
 # Maintainer: Petexy <https://github.com/Petexy>
 
 pkgname=arcos-installer
-pkgver=3.1.5
-pkgrel=27
+pkgver=3.1.6
+pkgrel=28
 pkgdesc='Arctis Operating System Installer'
 url='https://github.com/zcharka'
 arch=('x86_64')
