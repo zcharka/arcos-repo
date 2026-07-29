@@ -32,75 +32,127 @@ class DEPicker(Gtk.Box):
 
         # Store callback
         self.on_continue_callback = on_continue_callback
-        self.selected_option = 0  # Default to first box
+        self.selected_option = 0  # Default to first row (Plasma)
         self.animation_played = False
 
         # Check internet connectivity
         self.has_internet = self.check_internet_connection()
         print(f"DEBUG: Internet connection status: {self.has_internet}")
 
-        # Basic widget setup - reduced margins and spacing
+        # Check GPU vendor (used to gate the SteamOS warning dialog)
+        self.gpu_vendor = self.detect_gpu_vendor()
+        print(f"DEBUG: Detected GPU vendor: {self.gpu_vendor}")
+
+        # Per-option "Tryb Big Picture" toggle state, keyed by option index
+        self.bigpicture_enabled = {}
+
+        # Basic widget setup
         self.set_orientation(Gtk.Orientation.VERTICAL)
         self.set_spacing(8)
 
-        # --- MODIFIED SECTION START ---
-        # Center the widget vertically in the parent window
-        self.set_valign(Gtk.Align.CENTER)
+        self.set_valign(Gtk.Align.FILL)
         self.set_vexpand(True)
 
-        # Horizontal margins
         self.set_margin_start(40)
         self.set_margin_end(40)
         self.set_margin_top(5)
         self.set_margin_bottom(5)
-        # --- MODIFIED SECTION END ---
 
         # Setup CSS first
         self.setup_css()
 
-        # Title - smaller font
+        # Title
         title = Gtk.Label()
-        title.set_markup('<span size="x-large" weight="bold">Choose Your Option</span>')
+        title.set_markup('<span size="x-large" weight="bold">Choose Your Environment</span>')
         title.set_halign(Gtk.Align.CENTER)
-        title.set_margin_bottom(20)
+        title.set_margin_bottom(14)
         self.append(title)
 
         # Get script directory for icons
         script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.script_dir = script_dir
 
-        # Define the two options
+        # Define the four environment options
         self.options = [
             {
-                "name": "Pure plasma",
-                "description": "Czysta plasma. Zainstalowany steam, discord, lutris oraz heroic games launcher",
-                "icon": "screen1.png",
-                "requires_internet": False
+                "key": "plasma",
+                "name": "Plasma",
+                "description": "Klasyczny pulpit KDE Plasma. Zainstalowany steam, discord, lutris oraz heroic games launcher.",
+                "icon": "plasma.png",
+                "requires_internet": False,
+                "bigpicture_capable": True,
+                "gpu_warning": False,
             },
             {
-                "name": "Big Picture",
-                "description": "konsolowy ekran steama. Gry zainstalowane w Heroic Games Launcher automatycznie trafią na steam. Jest opcja przełączenia w zwykły pulpit",
-                "icon": "screen2.png",
-                "requires_internet": True
-            }
+                "key": "gnome",
+                "name": "GNOME",
+                "description": "Pulpit GNOME z rozszerzeniami ArcOS.",
+                "icon": "gnome.png",
+                "requires_internet": False,
+                "bigpicture_capable": True,
+                "gpu_warning": False,
+            },
+            {
+                "key": "hyprland",
+                "name": "Hyprland",
+                "description": "Kafelkowy kompozytor Wayland (Hyprland) skonfigurowany pod ArcOS.",
+                "icon": "hyprland.png",
+                "requires_internet": False,
+                "bigpicture_capable": True,
+                "gpu_warning": False,
+            },
+            {
+                "key": "steamos",
+                "name": "SteamOS",
+                "description": "Konsolowy ekran Steam Big Picture (gamescope), uruchamiany od razu po starcie systemu. Gry z Heroic Games Launcher automatycznie trafiają na steam. Jest opcja przełączenia w zwykły pulpit.",
+                "icon": "steamos.png",
+                "requires_internet": True,
+                "bigpicture_capable": False,
+                "gpu_warning": True,
+            },
         ]
 
-        # Create options container - reduced spacing
-        self.options_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
-        self.options_container.set_halign(Gtk.Align.CENTER)
-        self.options_container.set_homogeneous(True)
+        # --- Main split layout: list on the left, details on the right ---
+        split_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        split_box.set_vexpand(True)
+        split_box.add_css_class("de_split_box")
 
-        self.option_boxes = []
+        # Left: scrolled list of options
+        list_scroller = Gtk.ScrolledWindow()
+        list_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        list_scroller.set_size_request(240, -1)
+        list_scroller.set_vexpand(True)
+        list_scroller.add_css_class("de_list_scroller")
 
-        # Create the two option boxes
+        self.option_list = Gtk.ListBox()
+        self.option_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.option_list.add_css_class("de_option_list")
+        self.option_list.connect("row-selected", self.on_row_selected)
+        list_scroller.set_child(self.option_list)
+
+        self.list_rows = []
         for i, option in enumerate(self.options):
-            option_box = self.create_option_box(option, i, script_dir)
-            self.options_container.append(option_box)
-            self.option_boxes.append(option_box)
+            row = self.create_list_row(option, i)
+            self.option_list.append(row)
+            self.list_rows.append(row)
 
-        self.append(self.options_container)
+        split_box.append(list_scroller)
 
-        # Set first box as selected by default
-        self.update_selection(0)
+        # Right: detail panel (image, title, description, Big Picture switch)
+        self.detail_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.detail_panel.set_hexpand(True)
+        self.detail_panel.set_vexpand(True)
+        self.detail_panel.set_halign(Gtk.Align.FILL)
+        self.detail_panel.set_valign(Gtk.Align.CENTER)
+        self.detail_panel.set_margin_start(28)
+        self.detail_panel.set_margin_end(12)
+        self.detail_panel.add_css_class("de_detail_panel")
+        split_box.append(self.detail_panel)
+
+        self.append(split_box)
+
+        # Select first row by default (also builds the initial detail panel)
+        self.option_list.select_row(self.list_rows[0])
 
         # Add checkboxes for optional features
         checkbox_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -191,163 +243,193 @@ class DEPicker(Gtk.Box):
         print("DEBUG: No internet connection detected")
         return False
 
-    def create_option_box(self, option, index, script_dir):
-        """Create a single selectable option box with smaller image"""
+    def detect_gpu_vendor(self):
+        """Best-effort GPU vendor detection via lspci. Returns 'nvidia', 'amd',
+        'intel', or 'unknown'. On hybrid laptops (Intel + NVIDIA) this
+        deliberately reports 'nvidia', since the gamescope/SteamOS glitches
+        this warns about affect hybrid setups too."""
+        try:
+            output = subprocess.check_output(["lspci", "-k"], text=True, timeout=5)
+        except Exception as e:
+            print(f"DEBUG: lspci failed, assuming unknown GPU vendor: {e}")
+            return "unknown"
 
-        # Check if this option requires internet and we don't have it
-        is_disabled = option.get("requires_internet", False) and not self.has_internet
+        lower = output.lower()
+        if "nvidia" in lower:
+            return "nvidia"
+        if "amd" in lower or "advanced micro devices" in lower or "radeon" in lower:
+            return "amd"
+        if "intel" in lower:
+            return "intel"
+        return "unknown"
 
-        # Main container - flexible dimensions
-        main_box = Gtk.Button()
-        main_box.add_css_class("option_box")
-        main_box.set_size_request(150, -1)
+    def create_list_row(self, option, index):
+        """Create a single sidebar row (small icon + name), Linexin-Center style."""
+        row = Gtk.ListBoxRow()
+        row.option_index = index
+        row.add_css_class("de_list_row")
 
-        if is_disabled:
-            main_box.add_css_class("disabled")
-            main_box.set_sensitive(False)
-        else:
-            main_box.connect("clicked", lambda btn, idx=index: self.on_option_selected(idx))
+        row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        row_box.set_margin_top(8)
+        row_box.set_margin_bottom(8)
+        row_box.set_margin_start(10)
+        row_box.set_margin_end(10)
 
-        # Content container - reduced spacing
-        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        content_box.set_margin_top(10)
-        content_box.set_margin_bottom(10)
-        content_box.set_margin_start(10)
-        content_box.set_margin_end(10)
+        icon = self.load_option_icon(option, size=28)
+        row_box.append(icon)
 
-        # Icon container - flexible size
-        icon_container = Gtk.Box()
-        icon_container.set_size_request(120, 120)
-        icon_container.set_halign(Gtk.Align.CENTER)
-        icon_container.set_valign(Gtk.Align.CENTER)
+        name_label = Gtk.Label(label=option["name"])
+        name_label.set_halign(Gtk.Align.START)
+        name_label.set_hexpand(True)
+        row_box.append(name_label)
 
-        # Try to load icon
-        icon_loaded = False
+        row.set_child(row_box)
+        return row
+
+    def load_option_icon(self, option, size=120):
+        """Load an option's icon at the given pixel size, falling back to an emoji tile."""
         icon_paths = [
-            os.path.join(script_dir, option["icon"]),
-            os.path.join(script_dir, "images", option["icon"])
+            os.path.join(self.script_dir, option["icon"]),
+            os.path.join(self.script_dir, "images", option["icon"]),
         ]
-
         for path in icon_paths:
-            print(f"DEBUG: Checking for icon at {path}")
             if os.path.isfile(path) and os.access(path, os.R_OK):
                 try:
-                    # Load with Gdk.Texture for validation
                     texture = Gdk.Texture.new_from_filename(path)
                     icon = Gtk.Picture.new_for_paintable(texture)
                     icon.set_content_fit(Gtk.ContentFit.CONTAIN)
                     icon.set_can_shrink(True)
-                    icon.set_size_request(120, 120)
+                    icon.set_size_request(size, size)
                     icon.add_css_class("option_icon_image")
-                    if is_disabled:
-                        icon.add_css_class("disabled_icon")
-                    icon_container.append(icon)
-                    icon_loaded = True
-                    print(f"DEBUG: Loaded icon for {option['name']}: {path}")
-                    break
+                    return icon
                 except Exception as e:
-                    print(f"DEBUG: Failed to load {path}: {str(e)}")
+                    print(f"DEBUG: Failed to load {path}: {e}")
+
+        # Fallback: emoji tile
+        fallback = Gtk.Box()
+        fallback.set_size_request(size, size)
+        fallback.add_css_class("large_fallback_icon")
+        fallback.set_halign(Gtk.Align.CENTER)
+        fallback.set_valign(Gtk.Align.CENTER)
+
+        fallback_label = Gtk.Label(label="🖥️")
+        fallback_label.add_css_class("fallback_emoji")
+
+        overlay = Gtk.Overlay()
+        overlay.set_child(fallback)
+        overlay.add_overlay(fallback_label)
+        return overlay
+
+    def on_row_selected(self, listbox, row):
+        """Called whenever the sidebar selection changes (including programmatically)."""
+        if row is None:
+            return
+        index = row.option_index
+        option = self.options[index]
+
+        if option.get("gpu_warning") and self.gpu_vendor == "nvidia":
+            self.show_nvidia_steamos_warning(index)
+            return
+
+        self.commit_selection(index)
+
+    def show_nvidia_steamos_warning(self, index):
+        """Warn NVIDIA users before letting them pick SteamOS/gamescope."""
+        dialog = Adw.MessageDialog.new(
+            self.get_root(),
+            "UWAGA!",
+            "ArcOS nie naprawia znanych błędów z sesją SteamOS dla NVIDII. "
+            "Mogą występować glitche graficzne i inne artefakty.",
+        )
+        dialog.add_response("cancel", "Anuluj i wybierz inne środowisko")
+        dialog.add_response("install-anyway", "Zainstaluj mimo to")
+        dialog.set_response_appearance("install-anyway", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+        dialog.set_close_response("cancel")
+
+        def on_response(dlg, response):
+            if response == "install-anyway":
+                self.commit_selection(index)
             else:
-                print(f"DEBUG: Path {path} does not exist or is not readable")
+                # Revert the visual selection back to whatever was actually selected before
+                previous_row = self.list_rows[self.selected_option]
+                # Avoid re-triggering the warning dialog in a loop
+                self.option_list.disconnect_by_func(self.on_row_selected)
+                self.option_list.select_row(previous_row)
+                self.option_list.connect("row-selected", self.on_row_selected)
 
-        if not icon_loaded:
-            # Fallback icon - flexible
-            fallback = Gtk.Box()
-            fallback.set_size_request(120, 120)
-            fallback.add_css_class("large_fallback_icon")
-            if is_disabled:
-                fallback.add_css_class("disabled_icon")
+        dialog.connect("response", on_response)
+        dialog.present()
 
-            # Add some text to the fallback
-            fallback_label = Gtk.Label()
-            fallback_label.set_text("📦" if index == 0 else "💼")
-            fallback_label.add_css_class("fallback_emoji")
-            fallback.set_halign(Gtk.Align.CENTER)
-            fallback.set_valign(Gtk.Align.CENTER)
+    def commit_selection(self, index):
+        """Actually apply a selection (after any GPU warning has been resolved)."""
+        print(f"DEBUG: Option {index} selected: {self.options[index]['name']}")
+        self.selected_option = index
+        self.build_detail_panel(index)
 
-            overlay = Gtk.Overlay()
-            overlay.set_child(fallback)
-            overlay.add_overlay(fallback_label)
+    def build_detail_panel(self, index):
+        """Rebuild the right-hand detail panel for the given option index."""
+        option = self.options[index]
 
-            icon_container.append(overlay)
-            print(f"DEBUG: Using fallback icon for {option['name']}")
+        child = self.detail_panel.get_first_child()
+        while child:
+            next_child = child.get_next_sibling()
+            self.detail_panel.remove(child)
+            child = next_child
 
-        content_box.append(icon_container)
+        image = self.load_option_icon(option, size=180)
+        image.set_halign(Gtk.Align.CENTER)
+        self.detail_panel.append(image)
 
-        # Option name - smaller font
         name_label = Gtk.Label()
-        name_label.set_markup(f'<span weight="bold" size="large">{option["name"]}</span>')
+        name_label.set_markup(f'<span weight="bold" size="x-large">{option["name"]}</span>')
         name_label.set_halign(Gtk.Align.CENTER)
-        name_label.set_wrap(True)
-        name_label.set_justify(Gtk.Justification.CENTER)
-        if is_disabled:
-            name_label.add_css_class("disabled_text")
-        content_box.append(name_label)
+        self.detail_panel.append(name_label)
 
-        # Option description - smaller font
         desc_label = Gtk.Label()
         desc_label.set_text(option["description"])
         desc_label.set_halign(Gtk.Align.CENTER)
         desc_label.set_wrap(True)
         desc_label.set_justify(Gtk.Justification.CENTER)
         desc_label.add_css_class("option_description")
-        if is_disabled:
-            desc_label.add_css_class("disabled_text")
-        content_box.append(desc_label)
+        self.detail_panel.append(desc_label)
 
-        # Add internet requirement notice if disabled
-        if is_disabled:
+        if option.get("requires_internet") and not self.has_internet:
             notice_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
             notice_box.set_halign(Gtk.Align.CENTER)
             notice_box.set_margin_top(5)
-
-            # Warning icon
-            warning_icon = Gtk.Label()
-            warning_icon.set_text("⚠️")
+            warning_icon = Gtk.Label(label="⚠️")
             notice_box.append(warning_icon)
-
             notice_label = Gtk.Label()
             notice_label.set_markup('<span size="small" weight="bold">Requires Internet</span>')
             notice_label.add_css_class("internet_notice")
             notice_box.append(notice_label)
+            self.detail_panel.append(notice_box)
 
-            content_box.append(notice_box)
+        # "Tryb Big Picture" switch - hidden for SteamOS (it already boots to Big Picture)
+        if option.get("bigpicture_capable"):
+            switch_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            switch_row.set_halign(Gtk.Align.CENTER)
+            switch_row.set_margin_top(14)
 
-        main_box.set_child(content_box)
+            switch_label = Gtk.Label(label="Tryb Big Picture")
+            switch_row.append(switch_label)
 
-        # Store index for reference
-        main_box.option_index = index
-        main_box.is_disabled = is_disabled
+            switch = Gtk.Switch()
+            switch.set_active(self.bigpicture_enabled.get(index, False))
+            switch.set_valign(Gtk.Align.CENTER)
+            switch.connect("state-set", self.on_bigpicture_switch_toggled, index)
+            switch_row.append(switch)
 
-        return main_box
+            switch_row.set_tooltip_text(
+                "Steam odpali się automatycznie w trybie Big Picture zaraz po starcie tego środowiska."
+            )
+            self.detail_panel.append(switch_row)
 
-    def on_option_selected(self, index):
-        """Handle option selection"""
-        # Check if the option is available
-        option = self.options[index]
-        if option.get("requires_internet", False) and not self.has_internet:
-            print(f"DEBUG: Cannot select {option['name']} - no internet connection")
-            return
-
-        print(f"DEBUG: Option {index} selected: {option['name']}")
-        self.selected_option = index
-        self.update_selection(index)
-
-    def update_selection(self, selected_index):
-        """Update visual selection state"""
-        for i, box in enumerate(self.option_boxes):
-            if hasattr(box, 'is_disabled') and box.is_disabled:
-                # Keep disabled state
-                continue
-
-            if i == selected_index:
-                box.add_css_class("selected")
-                box.remove_css_class("unselected")
-                print(f"DEBUG: Marked box {i} as selected")
-            else:
-                box.add_css_class("unselected")
-                box.remove_css_class("selected")
-                print(f"DEBUG: Marked box {i} as unselected")
+    def on_bigpicture_switch_toggled(self, switch, state, index):
+        self.bigpicture_enabled[index] = state
+        print(f"DEBUG: Big Picture autostart for option {index} set to {state}")
+        return False  # let GTK update the switch's visual state normally
 
     def on_continue_clicked(self, button):
         """Handle continue button click"""
@@ -366,12 +448,17 @@ class DEPicker(Gtk.Box):
             print("DEBUG: No continue callback provided")
 
     def write_selection_to_file(self):
-        """Write the selected option index and update checkbox state."""
+        """Write the selected option (index + key), the Big Picture autostart
+        flag for that option, and the update checkbox state."""
         config_dir = "/tmp/installer_config"
         config_file_de = os.path.join(config_dir, "de_selection")
+        config_file_de_key = os.path.join(config_dir, "de_selection_key")
         config_file_updates = os.path.join(config_dir, "install_updates")
+        config_file_bigpicture = os.path.join(config_dir, "bigpicture_autostart")
 
         updates_val = "1" if self.update_check.get_active() else "0"
+        de_key = self.options[self.selected_option]["key"]
+        bigpicture_val = "1" if self.bigpicture_enabled.get(self.selected_option, False) else "0"
 
         try:
             # Check if we have write permission to the directory
@@ -386,23 +473,38 @@ class DEPicker(Gtk.Box):
                 os.makedirs(config_dir, exist_ok=True)
                 with open(config_file_de, 'w') as f:
                     f.write(str(self.selected_option))
+                with open(config_file_de_key, 'w') as f:
+                    f.write(de_key)
                 with open(config_file_updates, 'w') as f:
                     f.write(updates_val)
-                print(f"DEBUG: Wrote selection index {self.selected_option} and flags to {config_dir}")
+                with open(config_file_bigpicture, 'w') as f:
+                    f.write(bigpicture_val)
+                print(f"DEBUG: Wrote selection index {self.selected_option} ({de_key}), "
+                      f"bigpicture={bigpicture_val} and flags to {config_dir}")
             else:
                 # Need elevated privileges, use pkexec
                 print("DEBUG: Elevated privileges required, using pkexec")
-                self.write_selection_with_pkexec(config_dir, config_file_de, config_file_updates, updates_val)
+                self.write_selection_with_pkexec(
+                    config_dir, config_file_de, config_file_de_key,
+                    config_file_updates, config_file_bigpicture,
+                    de_key, updates_val, bigpicture_val,
+                )
 
         except Exception as e:
             print(f"ERROR: Failed to write selection to file: {e}")
             # Try with pkexec as fallback
             try:
-                self.write_selection_with_pkexec(config_dir, config_file_de, config_file_updates, updates_val)
+                self.write_selection_with_pkexec(
+                    config_dir, config_file_de, config_file_de_key,
+                    config_file_updates, config_file_bigpicture,
+                    de_key, updates_val, bigpicture_val,
+                )
             except Exception as e2:
                 print(f"ERROR: Fallback with pkexec also failed: {e2}")
 
-    def write_selection_with_pkexec(self, config_dir, config_file_de, config_file_updates, updates_val):
+    def write_selection_with_pkexec(self, config_dir, config_file_de, config_file_de_key,
+                                     config_file_updates, config_file_bigpicture,
+                                     de_key, updates_val, bigpicture_val):
         """Write selection file using pkexec for elevated privileges"""
         import subprocess
 
@@ -410,8 +512,10 @@ class DEPicker(Gtk.Box):
         script_content = f"""#!/bin/bash
 mkdir -p "{config_dir}"
 echo "{self.selected_option}" > "{config_file_de}"
+echo "{de_key}" > "{config_file_de_key}"
 echo "{updates_val}" > "{config_file_updates}"
-chmod 644 "{config_file_de}" "{config_file_updates}"
+echo "{bigpicture_val}" > "{config_file_bigpicture}"
+chmod 644 "{config_file_de}" "{config_file_de_key}" "{config_file_updates}" "{config_file_bigpicture}"
 """
 
         # Write temp script
@@ -987,12 +1091,12 @@ chmod 644 "{config_file_de}" "{config_file_updates}"
             self.animation_played = True
 
     def refresh_ui(self):
-        """Re-check internet and update option availability"""
-        # Re-check internet connection
+        """Re-check internet and refresh the currently shown detail panel
+        (only SteamOS is internet-gated, and the sidebar rows themselves
+        don't need rebuilding - only the "Requires Internet" notice does)."""
         self.has_internet = self.check_internet_connection()
         print(f"DEBUG: Refreshing UI. Internet status: {self.has_internet}")
 
-        # Update checkboxes
         current_status = self.update_check.get_sensitive()
         if self.has_internet != current_status:
             self.update_check.set_sensitive(self.has_internet)
@@ -1004,31 +1108,8 @@ chmod 644 "{config_file_de}" "{config_file_updates}"
                 self.update_check.set_active(False)
                 self.update_check.set_tooltip_text("Internet connection required")
 
-        # Clear existing options in the container
-        # Note: We can't just clear the children because we need to rebuild them
-        # with the correct status.
-
-        # First, remove all children from options_container
-        child = self.options_container.get_first_child()
-        while child:
-            next_child = child.get_next_sibling()
-            self.options_container.remove(child)
-            child = next_child
-
-        # Clear the old boxes list
-        self.option_boxes = []
-
-        # Get script directory again
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-
-        # Re-create option boxes with updated status
-        for i, option in enumerate(self.options):
-            option_box = self.create_option_box(option, i, script_dir)
-            self.options_container.append(option_box)
-            self.option_boxes.append(option_box)
-
-        # Re-apply selection
-        self.update_selection(self.selected_option)
+        # Re-render the detail panel in case the internet-required notice needs updating
+        self.build_detail_panel(self.selected_option)
 
     def start_animation(self):
         """Fade in animation"""
@@ -1183,6 +1264,36 @@ chmod 644 "{config_file_de}" "{config_file_updates}"
 
         label {
             text-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .de_split_box {
+            border-radius: 12px;
+        }
+
+        .de_list_scroller {
+            border-right: 1px solid rgba(0,0,0,0.15);
+        }
+
+        .de_option_list {
+            background: transparent;
+        }
+
+        .de_list_row {
+            border-radius: 8px;
+            margin: 2px 6px;
+        }
+
+        .de_list_row:hover {
+            background: alpha(@theme_fg_color, 0.06);
+        }
+
+        .de_list_row:selected {
+            background: alpha(@accent_color, 0.15);
+            font-weight: bold;
+        }
+
+        .de_detail_panel {
+            padding: 12px;
         }
         """
 

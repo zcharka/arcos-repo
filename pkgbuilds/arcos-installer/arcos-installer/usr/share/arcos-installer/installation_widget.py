@@ -1266,8 +1266,11 @@ PROFILE
             "it.mijorus.gearlever",
             "com.github.tchx84.Flatseal",
             "com.usebottles.bottles",
-            "app.twintaillauncher.ttl",
             "com.heroicgameslauncher.hgl",
+            "com.opera.Opera",
+            "net.blockbench.Blockbench",
+            "org.vinegarhq.Sober",
+            "org.blender.Blender",
         ]
 
         selected_flatpaks = list(all_flatpaks)  # default: all
