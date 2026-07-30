@@ -140,7 +140,7 @@ class DEPicker(Gtk.Box):
 
         # Right: detail panel as an animated Gtk.Stack (one page per option)
         self.detail_stack = Gtk.Stack()
-        self.detail_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_UP_DOWN)
+        self.detail_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
         self.detail_stack.set_transition_duration(220)
         self.detail_stack.set_hexpand(True)
         self.detail_stack.set_vexpand(True)
@@ -371,26 +371,28 @@ class DEPicker(Gtk.Box):
         """Actually apply a selection (after any GPU warning has been resolved)."""
         print(f"DEBUG: Option {index} selected: {self.options[index]['name']}")
         self.selected_option = index
-        self.build_detail_panel(index)
+        self.detail_stack.set_visible_child_name(str(index))
 
-    def build_detail_panel(self, index):
-        """Rebuild the right-hand detail panel for the given option index."""
-        option = self.options[index]
-
-        child = self.detail_panel.get_first_child()
-        while child:
-            next_child = child.get_next_sibling()
-            self.detail_panel.remove(child)
-            child = next_child
+    def build_detail_page(self, option, index):
+        """Build the (static) detail page for one option, used as a Gtk.Stack child.
+        Built once at startup so switching between options animates instead of
+        rebuilding widgets from scratch."""
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        page.set_hexpand(True)
+        page.set_vexpand(True)
+        page.set_halign(Gtk.Align.FILL)
+        page.set_valign(Gtk.Align.CENTER)
+        page.set_margin_start(28)
+        page.set_margin_end(12)
 
         image = self.load_option_icon(option, size=180)
         image.set_halign(Gtk.Align.CENTER)
-        self.detail_panel.append(image)
+        page.append(image)
 
         name_label = Gtk.Label()
         name_label.set_markup(f'<span weight="bold" size="x-large">{option["name"]}</span>')
         name_label.set_halign(Gtk.Align.CENTER)
-        self.detail_panel.append(name_label)
+        page.append(name_label)
 
         desc_label = Gtk.Label()
         desc_label.set_text(option["description"])
@@ -398,19 +400,22 @@ class DEPicker(Gtk.Box):
         desc_label.set_wrap(True)
         desc_label.set_justify(Gtk.Justification.CENTER)
         desc_label.add_css_class("option_description")
-        self.detail_panel.append(desc_label)
+        page.append(desc_label)
 
-        if option.get("requires_internet") and not self.has_internet:
-            notice_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-            notice_box.set_halign(Gtk.Align.CENTER)
-            notice_box.set_margin_top(5)
-            warning_icon = Gtk.Label(label="⚠️")
-            notice_box.append(warning_icon)
-            notice_label = Gtk.Label()
-            notice_label.set_markup('<span size="small" weight="bold">Requires Internet</span>')
-            notice_label.add_css_class("internet_notice")
-            notice_box.append(notice_label)
-            self.detail_panel.append(notice_box)
+        # "Requires Internet" notice - built once, visibility toggled later by refresh_ui
+        notice_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        notice_box.set_halign(Gtk.Align.CENTER)
+        notice_box.set_margin_top(5)
+        warning_icon = Gtk.Label(label="⚠️")
+        notice_box.append(warning_icon)
+        notice_label = Gtk.Label()
+        notice_label.set_markup('<span size="small" weight="bold">Requires Internet</span>')
+        notice_label.add_css_class("internet_notice")
+        notice_box.append(notice_label)
+        notice_box.set_visible(bool(option.get("requires_internet") and not self.has_internet))
+        page.append(notice_box)
+        self.internet_notices = getattr(self, "internet_notices", {})
+        self.internet_notices[index] = (notice_box, option.get("requires_internet", False))
 
         # "Tryb Big Picture" switch - hidden for SteamOS (it already boots to Big Picture)
         if option.get("bigpicture_capable"):
@@ -426,11 +431,14 @@ class DEPicker(Gtk.Box):
             switch.set_valign(Gtk.Align.CENTER)
             switch.connect("state-set", self.on_bigpicture_switch_toggled, index)
             switch_row.append(switch)
+            self.bigpicture_switches[index] = switch
 
             switch_row.set_tooltip_text(
                 "Steam odpali się automatycznie w trybie Big Picture zaraz po starcie tego środowiska."
             )
-            self.detail_panel.append(switch_row)
+            page.append(switch_row)
+
+        return page
 
     def on_bigpicture_switch_toggled(self, switch, state, index):
         self.bigpicture_enabled[index] = state
@@ -1114,8 +1122,9 @@ chmod 644 "{config_file_de}" "{config_file_de_key}" "{config_file_updates}" "{co
                 self.update_check.set_active(False)
                 self.update_check.set_tooltip_text("Internet connection required")
 
-        # Re-render the detail panel in case the internet-required notice needs updating
-        self.build_detail_panel(self.selected_option)
+        # Toggle the pre-built "Requires Internet" notices instead of rebuilding pages
+        for index, (notice_box, requires_internet) in getattr(self, "internet_notices", {}).items():
+            notice_box.set_visible(bool(requires_internet and not self.has_internet))
 
     def start_animation(self):
         """Fade in animation"""
