@@ -848,6 +848,35 @@ class InstallationWidget(Gtk.Box):
         echo "Configuration files copied successfully"
         """
 
+    def _get_fix_resolv_conf_command(self):
+        """Generate a bash command that gives the chroot working DNS.
+
+        The full live rootfs (including /etc/resolv.conf) gets rsynced onto
+        the target disk. On archiso that file is a symlink to
+        /run/systemd/resolve/stub-resolv.conf (via systemd-resolvconf).
+        arch-chroot mounts a fresh, empty /run inside the chroot, so that
+        symlink points nowhere and every "pacman -S ..." run inside the
+        chroot (DE packages, flatpak deps pulled via pacman, etc.) silently
+        fails to resolve mirror hostnames. Steps that call pacman in the
+        chroot are marked critical=False and use "|| true" internally, so
+        this failure was invisible - it looked like "nothing happens" when
+        picking a non-default DE instead of a clear network error.
+
+        Dereferencing the live system's own (working) resolv.conf and
+        writing it as a real file - not a symlink - into the target fixes
+        DNS resolution for every later arch-chroot pacman call.
+        """
+        return r"""
+        TARGET_RESOLV="/tmp/arcos_installer/root/etc/resolv.conf"
+        rm -f "$TARGET_RESOLV"
+        if [ -e /etc/resolv.conf ]; then
+            cp --dereference /etc/resolv.conf "$TARGET_RESOLV"
+            echo "✓ Copied working resolv.conf into the target for chroot DNS"
+        else
+            echo "Warning: no /etc/resolv.conf on the live system to copy"
+        fi
+        """
+
     def _get_install_de_packages_command(self):
         """Generate a bash command (run inside arch-chroot, after add_users.sh)
         that installs the package set for whichever DE was picked in
@@ -874,21 +903,44 @@ class InstallationWidget(Gtk.Box):
         SELECTION="$(cat "$SELECTION_FILE")"
         echo "Installing packages for DE selection: $SELECTION"
 
+        # Plasma ships baked into the base image. Anything other than "plasma"
+        # means we tear the Plasma session down first, so the machine doesn't
+        # end up with two desktop environments fighting over the display
+        # manager (which is what silently kept booting into Plasma no matter
+        # what was picked here).
+        remove_plasma() {
+            echo "Removing Plasma (switching to $SELECTION)..."
+            systemctl disable sddm.service 2>/dev/null || true
+            pacman -Rdd --noconfirm plasma-meta plasma-desktop plasma-workspace \
+                kwin sddm 2>/dev/null || true
+            echo "✓ Plasma removed"
+        }
+
         case "$SELECTION" in
             plasma)
                 echo "Plasma is part of the base image, nothing extra to install."
                 ;;
             gnome)
+                remove_plasma
                 pacman -S --needed --noconfirm gnome gnome-tweaks gdm
+                systemctl enable gdm.service
+                echo "✓ GDM enabled as display manager"
                 ;;
             hyprland)
+                remove_plasma
                 pacman -S --needed --noconfirm hyprland waybar wofi kitty grim slurp \
                     swaync hyprpaper xdg-desktop-portal-hyprland polkit-kde-agent \
-                    qt5-wayland qt6-wayland
+                    qt5-wayland qt6-wayland sddm
+                systemctl enable sddm.service
+                echo "✓ SDDM enabled (Hyprland session selectable at login)"
                 ;;
             steamos)
+                remove_plasma
                 pacman -S --needed --noconfirm gamescope-session-git gamescope-session-steam-git \
                     gamescope steam mangohud
+                # No display manager here on purpose: the "Big Picture
+                # autologin" step further down wires tty1 autologin straight
+                # into gamescope-session-plus for SteamOS.
                 ;;
             *)
                 echo "Unknown de_selection_key '$SELECTION', skipping DE package installation"
@@ -1281,6 +1333,14 @@ PROFILE
             description="Ensuring kernel image is present on new rootfs in case of no internet",
             weight=1.0,
             critical=True
+        ))
+
+        steps.append(InstallationStep(
+            label="Fixing DNS resolution for chroot",
+            command=["sudo", "bash", "-c", self._get_fix_resolv_conf_command()],
+            description="Making sure pacman inside the chroot can resolve mirror hostnames",
+            weight=0.2,
+            critical=False
         ))
 
         steps.append(InstallationStep(

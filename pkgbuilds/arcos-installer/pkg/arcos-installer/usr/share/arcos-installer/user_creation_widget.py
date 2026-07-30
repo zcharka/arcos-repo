@@ -45,33 +45,33 @@ class UserCreationWidget(Gtk.Box):
         self.set_spacing(20)
         self.set_margin_top(15)
         self.set_margin_bottom(15)
-        
+
         # Setup CSS
         self.setup_css()
-        
+
         # State tracking
         self.root_enabled = False
         self.validation_errors = set()
-        
+
         # Configuration output directory
         # Default to /tmp which is usually tmpfs but has more space allocated
         # Or use a custom directory (like a mounted partition)
         self.config_output_dir = config_output_dir or "/tmp"
-        
+
         # --- Title Label ---
         self.title = Gtk.Label()
         self.title.set_markup('<span size="xx-large" weight="bold">' + _("Create Your User Account") + '</span>')
         self.title.set_halign(Gtk.Align.CENTER)
         self.append(self.title)
-        
+
         # --- Adw.Clamp constrains the width of the content ---
         clamp = Adw.Clamp(margin_start=12, margin_end=12, maximum_size=600)
         clamp.set_vexpand(True)
         self.append(clamp)
-        
+
         content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         clamp.set_child(content_box)
-        
+
         # --- Subtitle Label ---
         self.subtitle = Gtk.Label(
             label=_("Set up your account to log in to the system."),
@@ -79,311 +79,311 @@ class UserCreationWidget(Gtk.Box):
         )
         self.subtitle.add_css_class('dim-label')
         content_box.append(self.subtitle)
-        
+
         # --- Scrolled Window for the form ---
         scrolled_window = Gtk.ScrolledWindow()
         scrolled_window.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scrolled_window.set_vexpand(True)
         content_box.append(scrolled_window)
-        
+
         # Form container
         form_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
         form_box.set_margin_top(20)
         form_box.set_margin_start(20)
         form_box.set_margin_end(20)
         scrolled_window.set_child(form_box)
-        
+
         # --- User Account Section ---
         user_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         form_box.append(user_section)
-        
+
         user_header = Gtk.Label(label="User Account", xalign=0)
         user_header.set_markup('<b>User Account</b>')
         user_section.append(user_header)
-        
+
         # Username field
         username_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         user_section.append(username_box)
-        
+
         username_label = Gtk.Label(label="Username", xalign=0)
         username_label.add_css_class('dim-label')
         username_box.append(username_label)
-        
+
         self.username_entry = Gtk.Entry()
         self.username_entry.set_placeholder_text("e.g., john")
         self.username_entry.connect("changed", self.validate_fields)
         username_box.append(self.username_entry)
-        
+
         self.username_error = Gtk.Label(xalign=0)
         self.username_error.add_css_class('error')
         self.username_error.set_wrap(True)
         self.username_error.set_max_width_chars(50)
         self.username_error.set_visible(False)
         username_box.append(self.username_error)
-        
+
         # Full Name field
         fullname_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         user_section.append(fullname_box)
-        
+
         fullname_label = Gtk.Label(label="Full Name", xalign=0)
         fullname_label.add_css_class('dim-label')
         fullname_box.append(fullname_label)
-        
+
         self.fullname_entry = Gtk.Entry()
         self.fullname_entry.set_placeholder_text("e.g., John Doe")
         self.fullname_entry.connect("changed", self.validate_fields)
         fullname_box.append(self.fullname_entry)
-        
+
         # Strong password toggle
         strong_password_toggle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         user_section.append(strong_password_toggle_box)
-        
+
         strong_password_label = Gtk.Label(label="Require Strong Password", xalign=0, hexpand=True)
         strong_password_label.set_markup('<b>Wymagaj silnego hasła (Require Strong Password)</b>')
         strong_password_toggle_box.append(strong_password_label)
-        
+
         self.strong_password_switch = Gtk.Switch()
         self.strong_password_switch.set_valign(Gtk.Align.CENTER)
         self.strong_password_switch.set_active(False)
         self.strong_password_switch.connect("notify::active", self.on_strong_password_toggled)
         strong_password_toggle_box.append(self.strong_password_switch)
-        
+
         # Password field
         password_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         user_section.append(password_box)
-        
+
         password_label = Gtk.Label(label="Password", xalign=0)
         password_label.add_css_class('dim-label')
         password_box.append(password_label)
-        
+
         self.password_entry = Gtk.PasswordEntry()
         self.password_entry.set_show_peek_icon(True)
         self.password_entry.connect("changed", self.validate_fields)
         password_box.append(self.password_entry)
-        
+
         self.password_strength = Gtk.Label(xalign=0)
         self.password_strength.add_css_class('dim-label')
         password_box.append(self.password_strength)
-        
+
         # Repeat Password field
         repeat_password_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         user_section.append(repeat_password_box)
-        
+
         repeat_password_label = Gtk.Label(label="Repeat Password", xalign=0)
         repeat_password_label.add_css_class('dim-label')
         repeat_password_box.append(repeat_password_label)
-        
+
         self.repeat_password_entry = Gtk.PasswordEntry()
         self.repeat_password_entry.set_show_peek_icon(True)
         self.repeat_password_entry.connect("changed", self.validate_fields)
         repeat_password_box.append(self.repeat_password_entry)
-        
+
         self.password_match_error = Gtk.Label(xalign=0)
         self.password_match_error.add_css_class('error')
         self.password_match_error.set_wrap(True)
         self.password_match_error.set_max_width_chars(50)
         self.password_match_error.set_visible(False)
         repeat_password_box.append(self.password_match_error)
-        
+
         # --- System Configuration Section ---
         system_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         form_box.append(system_section)
-        
+
         separator1 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         system_section.append(separator1)
-        
+
         system_header = Gtk.Label(label="System Configuration", xalign=0)
         system_header.set_markup('<b>System Configuration</b>')
         system_section.append(system_header)
-        
+
         # Computer Name field
         hostname_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         system_section.append(hostname_box)
-        
+
         hostname_label = Gtk.Label(label="Computer's Name", xalign=0)
         hostname_label.add_css_class('dim-label')
         hostname_box.append(hostname_label)
-        
+
         self.hostname_entry = Gtk.Entry()
         self.hostname_entry.set_text("ArcOS-PC")
         self.hostname_entry.connect("changed", self.validate_fields)
         hostname_box.append(self.hostname_entry)
-        
+
         self.hostname_error = Gtk.Label(xalign=0)
         self.hostname_error.add_css_class('error')
         self.hostname_error.set_wrap(True)
         self.hostname_error.set_max_width_chars(50)
         self.hostname_error.set_visible(False)
         hostname_box.append(self.hostname_error)
-        
+
         # --- Root Account Section ---
         root_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         form_box.append(root_section)
-        
+
         separator2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         root_section.append(separator2)
-        
+
         # Root account toggle
         root_toggle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         root_section.append(root_toggle_box)
-        
+
         root_toggle_label = Gtk.Label(label="Enable Root account?", xalign=0, hexpand=True)
         root_toggle_label.set_markup('<b>Enable Root account?</b>')
         root_toggle_box.append(root_toggle_label)
-        
+
         self.root_switch = Gtk.Switch()
         self.root_switch.set_valign(Gtk.Align.CENTER)
         self.root_switch.connect("notify::active", self.on_root_toggled)
         root_toggle_box.append(self.root_switch)
-        
+
         # Root password fields (initially hidden)
         self.root_fields_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self.root_fields_box.set_visible(False)
         root_section.append(self.root_fields_box)
-        
+
         # Root Password field
         root_password_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.root_fields_box.append(root_password_box)
-        
+
         root_password_label = Gtk.Label(label="Root Password", xalign=0)
         root_password_label.add_css_class('dim-label')
         root_password_box.append(root_password_label)
-        
+
         self.root_password_entry = Gtk.PasswordEntry()
         self.root_password_entry.set_show_peek_icon(True)
         self.root_password_entry.connect("changed", self.validate_fields)
         root_password_box.append(self.root_password_entry)
-        
+
         self.root_password_strength = Gtk.Label(xalign=0)
         self.root_password_strength.add_css_class('dim-label')
         root_password_box.append(self.root_password_strength)
-        
+
         # Repeat Root Password field
         repeat_root_password_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.root_fields_box.append(repeat_root_password_box)
-        
+
         repeat_root_password_label = Gtk.Label(label="Repeat Root Password", xalign=0)
         repeat_root_password_label.add_css_class('dim-label')
         repeat_root_password_box.append(repeat_root_password_label)
-        
+
         self.repeat_root_password_entry = Gtk.PasswordEntry()
         self.repeat_root_password_entry.set_show_peek_icon(True)
         self.repeat_root_password_entry.connect("changed", self.validate_fields)
         repeat_root_password_box.append(self.repeat_root_password_entry)
-        
+
         self.root_password_match_error = Gtk.Label(xalign=0)
         self.root_password_match_error.add_css_class('error')
         self.root_password_match_error.set_wrap(True)
         self.root_password_match_error.set_max_width_chars(50)
         self.root_password_match_error.set_visible(False)
         repeat_root_password_box.append(self.root_password_match_error)
-        
+
         # --- Navigation Buttons ---
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
         button_box.set_halign(Gtk.Align.CENTER)
         self.append(button_box)
-        
+
         self.btn_back = Gtk.Button(label="Back")
         self.btn_back.add_css_class('back_button')
         self.btn_back.set_size_request(140, 50)
-        
+
         # Add hover effects to back button
         back_hover = Gtk.EventControllerMotion()
         back_hover.connect("enter", lambda c, x, y: self.btn_back.add_css_class("pulse-animation"))
         back_hover.connect("leave", lambda c: self.btn_back.remove_css_class("pulse-animation"))
         self.btn_back.add_controller(back_hover)
-        
+
         button_box.append(self.btn_back)
-        
+
         self.btn_proceed = Gtk.Button(label="Install the system")
         self.btn_proceed.add_css_class('suggested-action')
         self.btn_proceed.add_css_class('continue_button')
         self.btn_proceed.set_size_request(140, 50)
         self.btn_proceed.set_sensitive(False)
         self.btn_proceed.connect("clicked", self.on_continue_clicked)
-        
+
         # Add hover effects to continue button
         continue_hover = Gtk.EventControllerMotion()
         continue_hover.connect("enter", lambda c, x, y: self.btn_proceed.add_css_class("pulse-animation"))
         continue_hover.connect("leave", lambda c: self.btn_proceed.remove_css_class("pulse-animation"))
         self.btn_proceed.add_controller(continue_hover)
-        
+
         button_box.append(self.btn_proceed)
-        
+
         # Initial validation
         self.validate_fields()
         get_localization_manager().update_widget_tree(self)
-    
+
     def on_strong_password_toggled(self, switch, param):
         """Handle strong password toggle."""
         self.validate_fields()
-    
+
     def on_root_toggled(self, switch, param):
         """Handle root account toggle."""
         self.root_enabled = switch.get_active()
         self.root_fields_box.set_visible(self.root_enabled)
-        
+
         # Clear root password fields when disabled
         if not self.root_enabled:
             self.root_password_entry.set_text("")
             self.repeat_root_password_entry.set_text("")
-        
+
         self.validate_fields()
-    
+
     def check_password_strength(self, password):
         """Check password strength and return a rating."""
         if not password:
             return "", ""
-        
+
         # Get translation manager explicitly to ensure fresh state
         lm = get_localization_manager()
         # print(f"DEBUG: Password check language: {lm.current_language}")
-        
+
         # Helper for translation
         def tr(key):
             return lm.get_text(key)
-        
+
         # Define translation keys
         at_least_8 = tr("at least 8 characters")
         lower_letters = tr("lowercase letters")
         upper_letters = tr("uppercase letters")
         numbers_text = tr("numbers")
         special_characters = tr("special characters")
-        
+
         weak = tr("Weak")
         fair = tr("Fair")
         good = tr("Good")
         strong = tr("Strong")
         add_text = tr("add")
-        
+
         strength = 0
         feedback = []
-        
+
         if len(password) >= 8:
             strength += 1
         else:
             feedback.append(at_least_8)
-        
+
         if re.search(r'[a-z]', password):
             strength += 1
         else:
             feedback.append(lower_letters)
-        
+
         if re.search(r'[A-Z]', password):
             strength += 1
         else:
             feedback.append(upper_letters)
-        
+
         if re.search(r'[0-9]', password):
             strength += 1
         else:
             feedback.append(numbers_text)
-        
+
         if re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
             strength += 1
         else:
             feedback.append(special_characters)
-        
+
         if strength <= 2:
             color = "red"
             text = weak
@@ -396,50 +396,50 @@ class UserCreationWidget(Gtk.Box):
         else:
             color = "green"
             text = strong
-        
+
         if feedback and strength < 5:
             feedback_list = ", ".join(feedback[:2])
             text += f" ({add_text} {feedback_list})"
-        
+
         return f'<span foreground="{color}">{text}</span>', strength
-    
+
     def validate_username(self, username):
         """Validate username according to Linux standards."""
         if not username:
             return False, "Username is required"
-        
+
         if not re.match(r'^[a-z_][a-z0-9_-]*$', username):
             return False, "Username must start with a letter or underscore, and contain only lowercase letters, numbers, underscores, and hyphens"
-        
+
         if len(username) > 32:
             return False, "Username must be 32 characters or less"
-        
+
         # Check for reserved usernames
-        reserved = ['root', 'daemon', 'bin', 'sys', 'sync', 'games', 'man', 'lp', 
+        reserved = ['root', 'daemon', 'bin', 'sys', 'sync', 'games', 'man', 'lp',
                    'mail', 'news', 'uucp', 'proxy', 'www-data', 'backup', 'nobody']
         if username in reserved:
             return False, f"'{username}' is a reserved system username"
-        
+
         return True, ""
-    
+
     def validate_hostname(self, hostname):
         """Validate hostname according to RFC standards."""
         if not hostname:
             return False, "Computer name is required"
-        
+
         if not re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$', hostname):
             return False, "Must start and end with a letter or number, and contain only letters, numbers, and hyphens"
-        
+
         if len(hostname) > 63:
             return False, "Computer name must be 63 characters or less"
-        
+
         return True, ""
-    
+
     def validate_fields(self, widget=None):
         """Validate all form fields and update UI accordingly."""
         self.validation_errors.clear()
         all_valid = True
-        
+
         # Validate username
         username = self.username_entry.get_text()
         username_valid, username_error = self.validate_username(username)
@@ -450,7 +450,7 @@ class UserCreationWidget(Gtk.Box):
             all_valid = False
         else:
             self.username_error.set_visible(False)
-        
+
         # Validate hostname
         hostname = self.hostname_entry.get_text()
         hostname_valid, hostname_error = self.validate_hostname(hostname)
@@ -461,11 +461,11 @@ class UserCreationWidget(Gtk.Box):
             all_valid = False
         else:
             self.hostname_error.set_visible(False)
-        
+
         # Check user password strength
         user_password = self.password_entry.get_text()
         repeat_password = self.repeat_password_entry.get_text()
-        
+
         if not user_password:
             self.password_strength.set_text("")
             self.validation_errors.add("no_password")
@@ -476,7 +476,7 @@ class UserCreationWidget(Gtk.Box):
             if self.strong_password_switch.get_active() and strength_level < 4:
                 self.validation_errors.add("weak_password")
                 all_valid = False
-        
+
         # Check user password match - FIXED LOGIC
         if user_password and repeat_password:
             if user_password != repeat_password:
@@ -501,12 +501,12 @@ class UserCreationWidget(Gtk.Box):
         else:
             # Both fields are empty
             self.password_match_error.set_visible(False)
-        
+
         # Validate root password if enabled
         if self.root_enabled:
             root_password = self.root_password_entry.get_text()
             repeat_root_password = self.repeat_root_password_entry.get_text()
-            
+
             if not root_password:
                 self.root_password_strength.set_text("")
                 self.validation_errors.add("no_root_password")
@@ -517,7 +517,7 @@ class UserCreationWidget(Gtk.Box):
                 if self.strong_password_switch.get_active() and strength_level < 4:
                     self.validation_errors.add("weak_root_password")
                     all_valid = False
-            
+
             # Check root password match - FIXED LOGIC
             if root_password and repeat_root_password:
                 if root_password != repeat_root_password:
@@ -542,20 +542,20 @@ class UserCreationWidget(Gtk.Box):
             else:
                 # Both root password fields are empty
                 self.root_password_match_error.set_visible(False)
-        
+
         # Check if required fields are filled
         if not self.fullname_entry.get_text():
             self.validation_errors.add("no_fullname")
             all_valid = False
-        
+
         self.btn_proceed.set_sensitive(all_valid)
         return all_valid
-    
+
     def generate_salt(self, length=16):
         """Generate a random salt for password hashing."""
         chars = string.ascii_letters + string.digits + './'
         return ''.join(random.choice(chars) for _ in range(length))
-    
+
     def hash_password(self, password):
         """
         Hash a password as SHA-512 crypt (shadow format ``$6$salt$...``) so
@@ -620,7 +620,7 @@ class UserCreationWidget(Gtk.Box):
             "Unable to produce a valid SHA-512 password hash. "
             "None of crypt/openssl/mkpasswd is available on this system."
         )
-    
+
     def on_continue_clicked(self, button):
         """Handle the continue button click and generate configuration files."""
         if not self.validate_fields():
@@ -653,16 +653,16 @@ class UserCreationWidget(Gtk.Box):
         # Create configuration directory in the specified output location
         config_dir = os.path.join(self.config_output_dir, 'installer_config')
         os.makedirs(config_dir, exist_ok=True)
-        
+
         try:
             # Generate single combined configuration script
             self.generate_configuration_script(config_dir, user_data)
-            
+
             print(f"Configuration script generated successfully in {config_dir}")
-            
+
             # Emit signal or callback for next step
             # self.emit('user-created', user_data)
-            
+
         except Exception as e:
             print(f"Error generating configuration files: {e}")
             # Show error dialog
@@ -674,7 +674,7 @@ class UserCreationWidget(Gtk.Box):
             dialog.add_response("ok", "OK")
             dialog.add_response("ok", "OK")
             dialog.present()
-    
+
     def setup_css(self):
         """Setup CSS styling for buttons"""
         css_provider = Gtk.CssProvider()
@@ -686,12 +686,12 @@ class UserCreationWidget(Gtk.Box):
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             text-shadow: 0 1px 2px rgba(0,0,0,0.1);
         }
-        
+
         .back_button:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 15px alpha(@theme_bg_color, 0.3);
         }
-        
+
         .back_button:active {
             transform: translateY(0px);
         }
@@ -703,22 +703,22 @@ class UserCreationWidget(Gtk.Box):
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             text-shadow: 0 1px 2px rgba(0,0,0,0.1);
         }
-        
+
         .continue_button:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 15px alpha(@accent_color, 0.3);
         }
-        
+
         .continue_button:active {
             transform: translateY(0px);
         }
-        
+
         @keyframes pulse {
             0% { transform: scale(1); }
             50% { transform: scale(1.05); }
             100% { transform: scale(1); }
         }
-        
+
         .pulse-animation {
             animation: pulse 2s ease-in-out infinite;
         }
@@ -730,11 +730,11 @@ class UserCreationWidget(Gtk.Box):
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
 
-    
+
     def generate_configuration_script(self, config_dir, user_data):
         """Generate a single script that handles all user and system configuration."""
         script_file = os.path.join(config_dir, 'add_users.sh')
-        
+
         # Password hashes are already generated, no need to escape
         user_password_hash = user_data['password_hash']
         root_password_hash = user_data.get('root_password_hash', '') if user_data['root_enabled'] else ''
@@ -845,6 +845,20 @@ if [ ! -f /etc/sudoers.d/10-installer ]; then
 fi
 
 # =========================================
+# REMOVE LIVE SESSION ACCOUNT
+# =========================================
+echo ""
+echo "Removing live-session account..."
+if [ "$USERNAME" != "arcos" ] && id "arcos" &>/dev/null; then
+    pkill -KILL -u arcos &>/dev/null || true
+    userdel -r arcos &>/dev/null || echo "Warning: could not fully remove live account 'arcos' (some files may remain)"
+    rm -f /etc/sudoers.d/10-arcos
+    echo "✓ Live account 'arcos' removed"
+else
+    echo "Skipping removal (installed username matches live account, or 'arcos' not present)"
+fi
+
+# =========================================
 # ROOT ACCOUNT CONFIGURATION
 # =========================================
 echo ""
@@ -937,16 +951,16 @@ echo "  Groups: wheel, audio, video, network, storage, input, power"
 echo "  Root account: $([ "$ROOT_ENABLED" = "true" ] && echo "Enabled" || echo "Disabled")"
 echo "========================================="
 """
-        
+
         with open(script_file, 'w') as f:
             f.write(script_content)
-        
+
         # Set restrictive permissions on the script since it contains password hashes
         # Only root should be able to read/execute this script
         os.chmod(script_file, 0o700)
-        
+
         print(f"Configuration script saved to {script_file} (with restricted permissions)")
-    
+
     def set_config_output_dir(self, directory):
         """Set the output directory for configuration files."""
         if os.path.exists(directory) and os.access(directory, os.W_OK):
@@ -955,12 +969,12 @@ echo "========================================="
         else:
             print(f"Warning: Directory {directory} is not writable, using {self.config_output_dir}")
             return False
-    
+
     def get_user_data(self):
         """Public method to get the configured user data."""
         if not self.validate_fields():
             return None
-        
+
         return {
             'username': self.username_entry.get_text(),
             'fullname': self.fullname_entry.get_text(),
@@ -972,29 +986,29 @@ echo "========================================="
 if __name__ == "__main__":
     # Example window to display the widget
     app = Gtk.Application()
-    
+
     def on_activate(app):
         win = Adw.ApplicationWindow(application=app, title="User Creation Test")
         win.set_default_size(600, 800)
-        
+
         # You can specify a custom output directory here
         # For example, if you have a mounted partition at /mnt/install
         # user_widget = UserCreationWidget(config_output_dir="/mnt/install")
-        
+
         # Or use the default /tmp directory
         user_widget = UserCreationWidget()
-        
+
         # Or set it after creation
         # user_widget.set_config_output_dir("/path/to/mounted/partition")
-        
+
         # Example callback for back button
         def on_back():
             print("Back button clicked")
-        
+
         user_widget.btn_back.connect("clicked", lambda x: on_back())
-        
+
         win.set_content(user_widget)
         win.present()
-    
+
     app.connect('activate', on_activate)
     app.run(None)

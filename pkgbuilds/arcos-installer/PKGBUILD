@@ -1,8 +1,8 @@
 # Maintainer: Petexy <https://github.com/Petexy>
 
 pkgname=arcos-installer
-pkgver=3.2.2
-pkgrel=34
+pkgver=3.2.3
+pkgrel=35
 pkgdesc='ArcOS Operating System Installer'
 url='https://github.com/zcharka'
 arch=('x86_64')
