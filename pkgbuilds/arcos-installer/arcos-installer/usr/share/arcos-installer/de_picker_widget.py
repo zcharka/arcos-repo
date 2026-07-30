@@ -127,7 +127,6 @@ class DEPicker(Gtk.Box):
         self.option_list = Gtk.ListBox()
         self.option_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self.option_list.add_css_class("de_option_list")
-        self.option_list.connect("row-selected", self.on_row_selected)
         list_scroller.set_child(self.option_list)
 
         self.list_rows = []
@@ -157,7 +156,13 @@ class DEPicker(Gtk.Box):
 
         self.append(split_box)
 
-        # Select first row by default (also switches the stack to page "0")
+        # Only NOW connect the selection signal and select the first row - everything
+        # the handler touches (detail_stack, bigpicture_switches, detail_pages) already
+        # exists at this point. GTK auto-selects row 0 as soon as it's appended to a
+        # SINGLE-selection ListBox; connecting the signal earlier than this made that
+        # auto-selection fire on_row_selected -> commit_selection before detail_stack
+        # existed, crashing the constructor with an AttributeError.
+        self.option_list.connect("row-selected", self.on_row_selected)
         self.option_list.select_row(self.list_rows[0])
 
         # Add checkboxes for optional features
