@@ -101,15 +101,6 @@ class DEPicker(Gtk.Box):
                 "bigpicture_capable": True,
                 "gpu_warning": False,
             },
-            {
-                "key": "steamos",
-                "name": "SteamOS",
-                "description": "Konsolowy ekran Steam Big Picture (gamescope), uruchamiany od razu po starcie systemu. Gry z Heroic Games Launcher automatycznie trafiają na steam. Jest opcja przełączenia w zwykły pulpit.",
-                "icon": "steamos.png",
-                "requires_internet": True,
-                "bigpicture_capable": False,
-                "gpu_warning": True,
-            },
         ]
 
         # --- Main split layout: list on the left, details on the right ---
