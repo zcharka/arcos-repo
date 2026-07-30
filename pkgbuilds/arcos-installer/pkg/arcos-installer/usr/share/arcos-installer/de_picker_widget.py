@@ -184,7 +184,6 @@ class DEPicker(Gtk.Box):
         # Package selections: None means "not customized, use all defaults"
         self.selected_packages = None
         self._cached_packages = None
-        self.selected_bootloader = "automatic"
 
         navigation_btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
         navigation_btns.set_halign(Gtk.Align.CENTER)
@@ -486,7 +485,6 @@ class DEPicker(Gtk.Box):
         # Write selection to file
         self.write_selection_to_file()
         self.write_package_selection()
-        self.write_bootloader_selection()
 
         if self.on_continue_callback:
             # Pass the selected option to the callback
@@ -648,43 +646,6 @@ chmod 644 "{config_file_de}" "{config_file_de_key}" "{config_file_updates}" "{co
                         pass
         except Exception as e:
             print(f"ERROR: Failed to write package selection: {e}")
-
-    def write_bootloader_selection(self):
-        """Write selected bootloader mode for bootloader.sh."""
-        config_dir = "/tmp/installer_config"
-        config_file = os.path.join(config_dir, "bootloader_choice")
-        selection = (self.selected_bootloader or "automatic").strip().lower()
-        valid = {"automatic", "systemd-boot", "grub", "refind"}
-        if selection not in valid:
-            selection = "automatic"
-
-        try:
-            if os.path.exists(config_dir):
-                can_write = os.access(config_dir, os.W_OK)
-            else:
-                can_write = os.access(os.path.dirname(config_dir), os.W_OK)
-
-            if can_write:
-                os.makedirs(config_dir, exist_ok=True)
-                with open(config_file, 'w') as f:
-                    f.write(selection)
-                print(f"DEBUG: Wrote bootloader selection '{selection}' to {config_file}")
-            else:
-                temp_script = "/tmp/bootloader_selection_writer.sh"
-                with open(temp_script, 'w') as f:
-                    f.write(f'#!/bin/bash\nmkdir -p "{config_dir}"\n')
-                    f.write(f'echo "{selection}" > "{config_file}"\n')
-                    f.write(f'chmod 644 "{config_file}"\n')
-                os.chmod(temp_script, 0o755)
-                try:
-                    subprocess.run(['pkexec', 'bash', temp_script], capture_output=True, text=True, timeout=30)
-                finally:
-                    try:
-                        os.remove(temp_script)
-                    except:
-                        pass
-        except Exception as e:
-            print(f"ERROR: Failed to write bootloader selection: {e}")
 
     def get_selected_option(self):
         """Get the currently selected option"""
@@ -863,7 +824,7 @@ chmod 644 "{config_file_de}" "{config_file_de_key}" "{config_file_updates}" "{co
         return self._cached_packages
 
     def on_advanced_setup_clicked(self, button):
-        """Open the Advanced Setup dialog with package and bootloader settings."""
+        """Open the Advanced Setup dialog with package settings."""
         # Query packages (cached after first run)
         packages = self._get_all_packages()
 
@@ -882,27 +843,12 @@ chmod 644 "{config_file_de}" "{config_file_de_key}" "{config_file_updates}" "{co
         dialog.set_content(main_box)
 
         header = Adw.HeaderBar()
-        header.set_title_widget(Adw.WindowTitle.new("Advanced Setup", "Packages and bootloader"))
+        header.set_title_widget(Adw.WindowTitle.new("Advanced Setup", "Packages"))
         main_box.append(header)
 
-        switcher = Gtk.StackSwitcher()
-        switcher.set_halign(Gtk.Align.CENTER)
-        switcher.set_margin_top(10)
-        switcher.set_margin_bottom(6)
-        main_box.append(switcher)
-
-        settings_stack = Gtk.Stack()
-        settings_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
-        settings_stack.set_transition_duration(180)
-        settings_stack.set_vexpand(True)
-        switcher.set_stack(settings_stack)
-        main_box.append(settings_stack)
-
         packages_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        settings_stack.add_titled(packages_page, "packages", "Packages")
-
-        bootloader_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        settings_stack.add_titled(bootloader_page, "bootloader", "Bootloader")
+        packages_page.set_vexpand(True)
+        main_box.append(packages_page)
 
         # Search entry
         search_entry = Gtk.SearchEntry()
@@ -1036,60 +982,6 @@ chmod 644 "{config_file_de}" "{config_file_de_key}" "{config_file_updates}" "{co
 
         search_entry.connect("search-changed", on_search_changed)
 
-        bootloader_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        bootloader_content.set_margin_top(16)
-        bootloader_content.set_margin_bottom(16)
-        bootloader_content.set_margin_start(24)
-        bootloader_content.set_margin_end(24)
-        bootloader_content.set_vexpand(True)
-        bootloader_page.append(bootloader_content)
-
-        bl_title = Gtk.Label()
-        bl_title.set_markup('<span size="large" weight="bold">Bootloader Selection</span>')
-        bl_title.set_halign(Gtk.Align.START)
-        bootloader_content.append(bl_title)
-
-        bl_desc = Gtk.Label()
-        bl_desc.set_text("Choose how the bootloader should be configured during installation.")
-        bl_desc.set_wrap(True)
-        bl_desc.set_halign(Gtk.Align.START)
-        bl_desc.add_css_class("dim-label")
-        bootloader_content.append(bl_desc)
-
-        bootloader_checks = {}
-
-        bootloader_options = [
-            ("automatic", "Automatic setup", "Use the current bootloader.sh logic (recommended)"),
-            ("systemd-boot", "systemd-boot", "Install systemd-boot (UEFI only)"),
-            ("grub", "GRUB", "Install GRUB (UEFI or Legacy BIOS)"),
-            ("refind", "rEFInd", "Install rEFInd (UEFI only)"),
-        ]
-
-        group_root = None
-        for key, label, subtitle in bootloader_options:
-            row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-            row.set_margin_top(4)
-            row.set_margin_bottom(4)
-
-            check = Gtk.CheckButton(label=label)
-            if group_root is None:
-                group_root = check
-            else:
-                check.set_group(group_root)
-
-            check.set_active(self.selected_bootloader == key)
-            row.append(check)
-
-            desc = Gtk.Label()
-            desc.set_text(subtitle)
-            desc.set_halign(Gtk.Align.START)
-            desc.set_margin_start(28)
-            desc.add_css_class("dim-label")
-            row.append(desc)
-
-            bootloader_checks[key] = check
-            bootloader_content.append(row)
-
         # Bottom bar
         bottom_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         bottom_bar.set_halign(Gtk.Align.END)
@@ -1112,13 +1004,7 @@ chmod 644 "{config_file_de}" "{config_file_de_key}" "{config_file_updates}" "{co
             for pkg_id, check in checkbuttons.items():
                 self.selected_packages[pkg_id] = check.get_active()
 
-            for key, check in bootloader_checks.items():
-                if check.get_active():
-                    self.selected_bootloader = key
-                    break
-
             self.write_package_selection()
-            self.write_bootloader_selection()
             dialog.close()
 
         apply_btn.connect("clicked", on_apply)

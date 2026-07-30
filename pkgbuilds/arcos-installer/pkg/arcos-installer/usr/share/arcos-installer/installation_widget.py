@@ -848,30 +848,143 @@ class InstallationWidget(Gtk.Box):
         echo "Configuration files copied successfully"
         """
 
-    def _get_bigpicture_autologin_command(self):
+    def _get_install_de_packages_command(self):
         """Generate a bash command (run inside arch-chroot, after add_users.sh)
-        that sets up autologin straight into gamescope-session-plus (Steam Big
-        Picture) if the user picked that option in de_picker_widget.py.
+        that installs the package set for whichever DE was picked in
+        de_picker_widget.py, reading /de_selection_key ("plasma" / "gnome" /
+        "hyprland" / "steamos").
 
-        de_picker_widget.py writes /tmp/installer_config/de_selection ("0" =
-        Pure plasma, "1" = Big Picture). The "Applying installer configuration"
-        step already rsyncs /tmp/installer_config/ into the target root, so by
-        the time this runs (inside the chroot) that file is simply /de_selection.
-        No-op if Big Picture wasn't selected or the file is missing.
+        Plasma is assumed to already be baked into the base ISO (the
+        default), so nothing extra is installed for it here. The other three
+        install their packages at install time so a single ISO can offer all
+        of them without baking every desktop into every install. SteamOS
+        pulls gamescope-session-git / gamescope-session-steam-git from
+        Sebastian's own repo (arcos-repo) - these were deliberately removed
+        from packages.x86_64 so they only land on machines that actually
+        picked SteamOS.
         """
         return r"""
-        SELECTION_FILE="/de_selection"
-        BIG_PICTURE_INDEX="1"
+        SELECTION_FILE="/de_selection_key"
 
         if [ ! -f "$SELECTION_FILE" ]; then
-            echo "No de_selection file found, skipping Big Picture autologin setup"
+            echo "No de_selection_key file found, skipping DE package installation"
+            exit 0
+        fi
+
+        SELECTION="$(cat "$SELECTION_FILE")"
+        echo "Installing packages for DE selection: $SELECTION"
+
+        case "$SELECTION" in
+            plasma)
+                echo "Plasma is part of the base image, nothing extra to install."
+                ;;
+            gnome)
+                pacman -S --needed --noconfirm gnome gnome-tweaks gdm
+                ;;
+            hyprland)
+                pacman -S --needed --noconfirm hyprland waybar wofi kitty grim slurp \
+                    swaync hyprpaper xdg-desktop-portal-hyprland polkit-kde-agent \
+                    qt5-wayland qt6-wayland
+                ;;
+            steamos)
+                pacman -S --needed --noconfirm gamescope-session-git gamescope-session-steam-git \
+                    gamescope steam mangohud
+                ;;
+            *)
+                echo "Unknown de_selection_key '$SELECTION', skipping DE package installation"
+                ;;
+        esac
+        """
+
+    def _get_bigpicture_autostart_command(self):
+        """Generate a bash command (run inside arch-chroot, after DE packages
+        and the user are set up) that wires up the "Tryb Big Picture" toggle
+        from de_picker_widget.py for plasma/gnome/hyprland: Steam auto-starts
+        in Big Picture mode (-tenfoot) as soon as that desktop session logs
+        in. Reads /bigpicture_autostart ("1"/"0") and /de_selection_key.
+        No-op for SteamOS (it already boots straight to Big Picture) or if
+        the toggle was left off.
+        """
+        return r"""
+        BP_FILE="/bigpicture_autostart"
+        DE_FILE="/de_selection_key"
+
+        if [ ! -f "$BP_FILE" ] || [ "$(cat "$BP_FILE")" != "1" ]; then
+            echo "Big Picture autostart not requested, skipping"
+            exit 0
+        fi
+
+        DE_SELECTION="$(cat "$DE_FILE" 2>/dev/null || echo unknown)"
+
+        if [ "$DE_SELECTION" = "steamos" ]; then
+            echo "SteamOS already boots straight to Big Picture, skipping autostart wiring"
+            exit 0
+        fi
+
+        TARGET_USER="$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 {print $1; exit}')"
+        if [ -z "$TARGET_USER" ]; then
+            echo "Warning: could not detect target user, skipping Big Picture autostart"
+            exit 0
+        fi
+
+        echo "Wiring up Big Picture autostart for '$TARGET_USER' (DE: $DE_SELECTION)..."
+
+        case "$DE_SELECTION" in
+            plasma|gnome)
+                AUTOSTART_DIR="/home/${TARGET_USER}/.config/autostart"
+                mkdir -p "$AUTOSTART_DIR"
+                cat > "$AUTOSTART_DIR/steam-bigpicture.desktop" << 'DESKTOP'
+[Desktop Entry]
+Type=Application
+Name=Steam Big Picture
+Exec=steam -tenfoot
+X-GNOME-Autostart-enabled=true
+DESKTOP
+                chown -R "${TARGET_USER}:${TARGET_USER}" "$AUTOSTART_DIR"
+                ;;
+            hyprland)
+                HYPR_CONF="/home/${TARGET_USER}/.config/hypr/hyprland.conf"
+                if [ -f "$HYPR_CONF" ] && ! grep -qF "steam -tenfoot" "$HYPR_CONF"; then
+                    echo "exec-once = steam -tenfoot" >> "$HYPR_CONF"
+                    chown "${TARGET_USER}:${TARGET_USER}" "$HYPR_CONF"
+                else
+                    echo "Warning: $HYPR_CONF not found, skipping exec-once injection"
+                fi
+                ;;
+            *)
+                echo "Unknown DE selection '$DE_SELECTION', skipping Big Picture autostart"
+                ;;
+        esac
+
+        echo "Big Picture autostart configured for '$TARGET_USER'."
+        """
+
+    def _get_bigpicture_autologin_command(self):
+        """Generate a bash command (run inside arch-chroot, after add_users.sh
+        and after gamescope-session packages are installed) that sets up
+        autologin straight into gamescope-session-plus (Steam Big Picture) if
+        the user picked "SteamOS" in de_picker_widget.py.
+
+        de_picker_widget.py now writes /tmp/installer_config/de_selection_key
+        as a string ("plasma" / "gnome" / "hyprland" / "steamos"). The
+        "Applying installer configuration" step already rsyncs
+        /tmp/installer_config/ into the target root, so by the time this runs
+        (inside the chroot) that file is simply /de_selection_key.
+        No-op if SteamOS wasn't selected or the file is missing.
+        """
+        return r"""
+        SELECTION_FILE="/de_selection_key"
+        STEAMOS_KEY="steamos"
+
+        if [ ! -f "$SELECTION_FILE" ]; then
+            echo "No de_selection_key file found, skipping Big Picture autologin setup"
             exit 0
         fi
 
         SELECTION="$(cat "$SELECTION_FILE")"
 
-        if [ "$SELECTION" != "$BIG_PICTURE_INDEX" ]; then
-            echo "Big Picture not selected (got '$SELECTION'), skipping autologin setup"
+        if [ "$SELECTION" != "$STEAMOS_KEY" ]; then
+            echo "SteamOS not selected (got '$SELECTION'), skipping autologin setup"
             exit 0
         fi
 
@@ -1211,9 +1324,25 @@ PROFILE
         ))
 
         steps.append(InstallationStep(
+            label="Installing desktop environment packages",
+            command=["sudo", "arch-chroot", "/tmp/arcos_installer/root", "bash", "-c", self._get_install_de_packages_command()],
+            description="Installing the packages for the desktop environment selected in the installer",
+            weight=5.0,
+            critical=False
+        ))
+
+        steps.append(InstallationStep(
             label="Configuring Big Picture autologin",
             command=["sudo", "arch-chroot", "/tmp/arcos_installer/root", "bash", "-c", self._get_bigpicture_autologin_command()],
             description="Setting up boot-straight-to-Steam-Big-Picture if that option was selected",
+            weight=0.5,
+            critical=False
+        ))
+
+        steps.append(InstallationStep(
+            label="Configuring Big Picture autostart",
+            command=["sudo", "arch-chroot", "/tmp/arcos_installer/root", "bash", "-c", self._get_bigpicture_autostart_command()],
+            description="Setting up the 'Tryb Big Picture' autostart toggle, if it was enabled",
             weight=0.5,
             critical=False
         ))
