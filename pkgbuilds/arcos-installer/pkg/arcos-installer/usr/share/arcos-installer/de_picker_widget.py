@@ -138,20 +138,26 @@ class DEPicker(Gtk.Box):
 
         split_box.append(list_scroller)
 
-        # Right: detail panel (image, title, description, Big Picture switch)
-        self.detail_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        self.detail_panel.set_hexpand(True)
-        self.detail_panel.set_vexpand(True)
-        self.detail_panel.set_halign(Gtk.Align.FILL)
-        self.detail_panel.set_valign(Gtk.Align.CENTER)
-        self.detail_panel.set_margin_start(28)
-        self.detail_panel.set_margin_end(12)
-        self.detail_panel.add_css_class("de_detail_panel")
-        split_box.append(self.detail_panel)
+        # Right: detail panel as an animated Gtk.Stack (one page per option)
+        self.detail_stack = Gtk.Stack()
+        self.detail_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_UP_DOWN)
+        self.detail_stack.set_transition_duration(220)
+        self.detail_stack.set_hexpand(True)
+        self.detail_stack.set_vexpand(True)
+        self.detail_stack.add_css_class("de_detail_panel")
+
+        self.bigpicture_switches = {}
+        self.detail_pages = {}
+        for i, option in enumerate(self.options):
+            page = self.build_detail_page(option, i)
+            self.detail_stack.add_named(page, str(i))
+            self.detail_pages[i] = page
+
+        split_box.append(self.detail_stack)
 
         self.append(split_box)
 
-        # Select first row by default (also builds the initial detail panel)
+        # Select first row by default (also switches the stack to page "0")
         self.option_list.select_row(self.list_rows[0])
 
         # Add checkboxes for optional features

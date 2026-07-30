@@ -402,41 +402,5 @@ mkinitcpio -P
 flatpak override --filesystem=xdg-config/gtk-4.0:ro
 flatpak override --filesystem=xdg-config/gtk-3.0:ro
 
-print_msg "Installing Ogulniega Minecraft Launcher..."
-
-mkdir -p "${ROOT}/usr/share/ogulniega"
-
-if check_internet; then
-    print_msg "Downloading Ogulniega Launcher..."
-    curl -L -o "${ROOT}/usr/share/ogulniega/ogulniega.jar" "https://ogulniega.com" 2>/dev/null || true
-else
-    print_warning "No internet connection. Ogulniega.jar could not be downloaded."
-    print_warning "You will need to manually place OgulniegaLauncher.jar in /usr/share/ogulniega/ after boot."
-fi
-
-
-cat << 'EOF' > "${ROOT}/usr/bin/ogulniega"
-#!/bin/bash
-# Uruchomienie z wymuszeniem Javy (upewnij się, że jre17-openjdk lub jre21-openjdk jest w profilu pakietów)
-exec java -jar /usr/share/ogulniega/ogulniega.jar "$@"
-EOF
-
-chmod +x "${ROOT}/usr/bin/ogulniega" 2>/dev/null || true
-
-mkdir -p "${ROOT}/usr/share/applications"
-cat << 'EOF' > "${ROOT}/usr/share/applications/ogulniega.desktop
-[Desktop Entry]
-Type=Application
-Name=Ogulniega
-Comment=Launcher Minecraft (Wydajność i Mody)
-Exec=ogulniega
-Icon=minecraft
-Categories=Game;
-Terminal=false
-StartupNotify=true
-EOF
-
-print_msg "Ogulniega Launcher integration completed."
-
 
 print_msg "Post-installation configuration completed successfully!"
