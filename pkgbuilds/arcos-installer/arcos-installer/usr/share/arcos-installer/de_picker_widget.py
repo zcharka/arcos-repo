@@ -275,7 +275,7 @@ class DEPicker(Gtk.Box):
         return "unknown"
 
     def create_list_row(self, option, index):
-        """Create a single sidebar row (small icon + name), Linexin-Center style."""
+        """Create a single sidebar row (icon from images/ + name), Linexin-Center style."""
         row = Gtk.ListBoxRow()
         row.option_index = index
         row.add_css_class("de_list_row")
@@ -286,7 +286,7 @@ class DEPicker(Gtk.Box):
         row_box.set_margin_start(10)
         row_box.set_margin_end(10)
 
-        icon = self.load_option_icon(option, size=28)
+        icon = self.load_images_dir_icon(option["icon"], size=28)
         row_box.append(icon)
 
         name_label = Gtk.Label(label=option["name"])
@@ -296,6 +296,34 @@ class DEPicker(Gtk.Box):
 
         row.set_child(row_box)
         return row
+
+    def load_images_dir_icon(self, filename, size=28):
+        """Load an icon strictly from <script_dir>/images/<filename> (used for the
+        small sidebar row icons). Falls back to an emoji tile if not found there."""
+        path = os.path.join(self.script_dir, "images", filename)
+        if os.path.isfile(path) and os.access(path, os.R_OK):
+            try:
+                texture = Gdk.Texture.new_from_filename(path)
+                icon = Gtk.Picture.new_for_paintable(texture)
+                icon.set_content_fit(Gtk.ContentFit.CONTAIN)
+                icon.set_can_shrink(True)
+                icon.set_size_request(size, size)
+                icon.add_css_class("option_icon_image")
+                return icon
+            except Exception as e:
+                print(f"DEBUG: Failed to load {path}: {e}")
+
+        fallback = Gtk.Box()
+        fallback.set_size_request(size, size)
+        fallback.add_css_class("large_fallback_icon")
+        fallback.set_halign(Gtk.Align.CENTER)
+        fallback.set_valign(Gtk.Align.CENTER)
+        fallback_label = Gtk.Label(label="🖥️")
+        fallback_label.add_css_class("fallback_emoji")
+        overlay = Gtk.Overlay()
+        overlay.set_child(fallback)
+        overlay.add_overlay(fallback_label)
+        return overlay
 
     def load_option_icon(self, option, size=120):
         """Load an option's icon at the given pixel size, falling back to an emoji tile."""
