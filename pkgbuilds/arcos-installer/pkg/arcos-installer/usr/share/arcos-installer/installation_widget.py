@@ -903,13 +903,19 @@ class InstallationWidget(Gtk.Box):
         SELECTION="$(cat "$SELECTION_FILE")"
         echo "Installing packages for DE selection: $SELECTION"
 
-        # Plasma ships baked into the base image. Anything other than "plasma"
-        # means we tear the Plasma session down first, so the machine doesn't
-        # end up with two desktop environments fighting over the display
-        # manager (which is what silently kept booting into Plasma no matter
-        # what was picked here).
+        # Files baked into the live airootfs (icons, .desktop overrides, etc.)
+        # can collide with files a DE package ships under the same path -
+        # pacman refuses the whole transaction on any such conflict. --overwrite
+        # tells it to just replace those specific paths instead of aborting.
+        PACMAN_INSTALL="pacman -S --needed --noconfirm --overwrite=*"
+
+        # Only tear Plasma down AFTER the new DE's packages are confirmed
+        # installed - never before. If we removed Plasma first and the new
+        # DE's install then failed (file conflict, network hiccup, whatever),
+        # the machine was left with zero desktop environments and an empty
+        # session list at the login screen.
         remove_plasma() {
-            echo "Removing Plasma (switching to $SELECTION)..."
+            echo "Removing Plasma (switched to $SELECTION)..."
             systemctl disable sddm.service 2>/dev/null || true
             pacman -Rdd --noconfirm plasma-meta plasma-desktop plasma-workspace \
                 kwin sddm 2>/dev/null || true
@@ -921,26 +927,35 @@ class InstallationWidget(Gtk.Box):
                 echo "Plasma is part of the base image, nothing extra to install."
                 ;;
             gnome)
-                remove_plasma
-                pacman -S --needed --noconfirm gnome gnome-tweaks gdm
-                systemctl enable gdm.service
-                echo "✓ GDM enabled as display manager"
+                if $PACMAN_INSTALL gnome gnome-tweaks gdm; then
+                    systemctl enable gdm.service
+                    echo "✓ GDM enabled as display manager"
+                    remove_plasma
+                else
+                    echo "ERROR: GNOME package installation failed - keeping Plasma so the system still boots to something."
+                fi
                 ;;
             hyprland)
-                remove_plasma
-                pacman -S --needed --noconfirm hyprland waybar wofi kitty grim slurp \
+                if $PACMAN_INSTALL hyprland waybar wofi kitty grim slurp \
                     swaync hyprpaper xdg-desktop-portal-hyprland polkit-kde-agent \
-                    qt5-wayland qt6-wayland sddm
-                systemctl enable sddm.service
-                echo "✓ SDDM enabled (Hyprland session selectable at login)"
+                    qt5-wayland qt6-wayland sddm; then
+                    systemctl enable sddm.service
+                    echo "✓ SDDM enabled (Hyprland session selectable at login)"
+                    remove_plasma
+                else
+                    echo "ERROR: Hyprland package installation failed - keeping Plasma so the system still boots to something."
+                fi
                 ;;
             steamos)
-                remove_plasma
-                pacman -S --needed --noconfirm gamescope-session-git gamescope-session-steam-git \
-                    gamescope steam mangohud
-                # No display manager here on purpose: the "Big Picture
-                # autologin" step further down wires tty1 autologin straight
-                # into gamescope-session-plus for SteamOS.
+                if $PACMAN_INSTALL gamescope-session-git gamescope-session-steam-git \
+                    gamescope steam mangohud; then
+                    # No display manager here on purpose: the "Big Picture
+                    # autologin" step further down wires tty1 autologin
+                    # straight into gamescope-session-plus for SteamOS.
+                    remove_plasma
+                else
+                    echo "ERROR: SteamOS package installation failed - keeping Plasma so the system still boots to something."
+                fi
                 ;;
             *)
                 echo "Unknown de_selection_key '$SELECTION', skipping DE package installation"
