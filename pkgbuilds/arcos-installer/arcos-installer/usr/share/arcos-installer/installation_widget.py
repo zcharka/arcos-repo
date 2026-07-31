@@ -893,6 +893,9 @@ class InstallationWidget(Gtk.Box):
         picked SteamOS.
         """
         return r"""
+        exec > /tmp/de_install_debug.log 2>&1
+        set -x
+
         SELECTION_FILE="/de_selection_key"
 
         if [ ! -f "$SELECTION_FILE" ]; then
@@ -907,7 +910,11 @@ class InstallationWidget(Gtk.Box):
         # can collide with files a DE package ships under the same path -
         # pacman refuses the whole transaction on any such conflict. --overwrite
         # tells it to just replace those specific paths instead of aborting.
-        PACMAN_INSTALL="pacman -S --needed --noconfirm --overwrite=*"
+        # This MUST be an array, not a plain string: an unquoted "*" in a
+        # string variable gets glob-expanded by bash to whatever happens to
+        # be in the current directory the moment it's invoked, silently
+        # mangling the whole pacman command.
+        PACMAN_INSTALL=(pacman -S --needed --noconfirm --overwrite='*')
 
         # Only tear Plasma down AFTER the new DE's packages are confirmed
         # installed - never before. If we removed Plasma first and the new
@@ -927,7 +934,7 @@ class InstallationWidget(Gtk.Box):
                 echo "Plasma is part of the base image, nothing extra to install."
                 ;;
             gnome)
-                if $PACMAN_INSTALL gnome gnome-tweaks gdm; then
+                if "${PACMAN_INSTALL[@]}" gnome gnome-tweaks gdm; then
                     systemctl enable gdm.service
                     echo "✓ GDM enabled as display manager"
                     remove_plasma
@@ -936,7 +943,7 @@ class InstallationWidget(Gtk.Box):
                 fi
                 ;;
             hyprland)
-                if $PACMAN_INSTALL hyprland waybar wofi kitty grim slurp \
+                if "${PACMAN_INSTALL[@]}" hyprland waybar wofi kitty grim slurp \
                     swaync hyprpaper xdg-desktop-portal-hyprland polkit-kde-agent \
                     qt5-wayland qt6-wayland sddm; then
                     systemctl enable sddm.service
@@ -947,7 +954,7 @@ class InstallationWidget(Gtk.Box):
                 fi
                 ;;
             steamos)
-                if $PACMAN_INSTALL gamescope-session-git gamescope-session-steam-git \
+                if "${PACMAN_INSTALL[@]}" gamescope-session-git gamescope-session-steam-git \
                     gamescope steam mangohud; then
                     # No display manager here on purpose: the "Big Picture
                     # autologin" step further down wires tty1 autologin
