@@ -39,10 +39,6 @@ class DEPicker(Gtk.Box):
         self.has_internet = self.check_internet_connection()
         print(f"DEBUG: Internet connection status: {self.has_internet}")
 
-        # Check GPU vendor (used to gate the SteamOS warning dialog)
-        self.gpu_vendor = self.detect_gpu_vendor()
-        print(f"DEBUG: Detected GPU vendor: {self.gpu_vendor}")
-
         # Per-option "Tryb Big Picture" toggle state, keyed by option index
         self.bigpicture_enabled = {}
 
@@ -72,7 +68,7 @@ class DEPicker(Gtk.Box):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.script_dir = script_dir
 
-        # Define the four environment options
+        # Define the six environment options
         self.options = [
             {
                 "key": "plasma",
@@ -81,7 +77,6 @@ class DEPicker(Gtk.Box):
                 "icon": "plasma.png",
                 "requires_internet": False,
                 "bigpicture_capable": True,
-                "gpu_warning": False,
             },
             {
                 "key": "gnome",
@@ -90,7 +85,6 @@ class DEPicker(Gtk.Box):
                 "icon": "gnome.png",
                 "requires_internet": False,
                 "bigpicture_capable": True,
-                "gpu_warning": False,
             },
             {
                 "key": "hyprland",
@@ -99,7 +93,22 @@ class DEPicker(Gtk.Box):
                 "icon": "hyprland.png",
                 "requires_internet": False,
                 "bigpicture_capable": True,
-                "gpu_warning": False,
+            },
+            {
+                "key": "cinnamon",
+                "name": "Cinnamon",
+                "description": "Lekki, klasyczny pulpit Cinnamon (znany z Linux Mint).",
+                "icon": "cinnamon.png",
+                "requires_internet": False,
+                "bigpicture_capable": True,
+            },
+            {
+                "key": "none",
+                "name": "Brak środowiska graficznego",
+                "description": "Instalacja bez pulpitu i menedżera logowania - system startuje w konsoli (TTY). Zalecane dla serwerów lub zaawansowanych użytkowników.",
+                "icon": "none.png",
+                "requires_internet": False,
+                "bigpicture_capable": False,
             },
         ]
 
@@ -244,26 +253,6 @@ class DEPicker(Gtk.Box):
         print("DEBUG: No internet connection detected")
         return False
 
-    def detect_gpu_vendor(self):
-        """Best-effort GPU vendor detection via lspci. Returns 'nvidia', 'amd',
-        'intel', or 'unknown'. On hybrid laptops (Intel + NVIDIA) this
-        deliberately reports 'nvidia', since the gamescope/SteamOS glitches
-        this warns about affect hybrid setups too."""
-        try:
-            output = subprocess.check_output(["lspci", "-k"], text=True, timeout=5)
-        except Exception as e:
-            print(f"DEBUG: lspci failed, assuming unknown GPU vendor: {e}")
-            return "unknown"
-
-        lower = output.lower()
-        if "nvidia" in lower:
-            return "nvidia"
-        if "amd" in lower or "advanced micro devices" in lower or "radeon" in lower:
-            return "amd"
-        if "intel" in lower:
-            return "intel"
-        return "unknown"
-
     def create_list_row(self, option, index):
         """Create a single sidebar row (icon from images/ + name), Linexin-Center style."""
         row = Gtk.ListBoxRow()
@@ -356,42 +345,10 @@ class DEPicker(Gtk.Box):
         index = row.option_index
         option = self.options[index]
 
-        if option.get("gpu_warning") and self.gpu_vendor == "nvidia":
-            self.show_nvidia_steamos_warning(index)
-            return
-
         self.commit_selection(index)
 
-    def show_nvidia_steamos_warning(self, index):
-        """Warn NVIDIA users before letting them pick SteamOS/gamescope."""
-        dialog = Adw.MessageDialog.new(
-            self.get_root(),
-            "UWAGA!",
-            "ArcOS nie naprawia znanych błędów z sesją SteamOS dla NVIDII. "
-            "Mogą występować glitche graficzne i inne artefakty.",
-        )
-        dialog.add_response("cancel", "Anuluj i wybierz inne środowisko")
-        dialog.add_response("install-anyway", "Zainstaluj mimo to")
-        dialog.set_response_appearance("install-anyway", Adw.ResponseAppearance.DESTRUCTIVE)
-        dialog.set_default_response("cancel")
-        dialog.set_close_response("cancel")
-
-        def on_response(dlg, response):
-            if response == "install-anyway":
-                self.commit_selection(index)
-            else:
-                # Revert the visual selection back to whatever was actually selected before
-                previous_row = self.list_rows[self.selected_option]
-                # Avoid re-triggering the warning dialog in a loop
-                self.option_list.disconnect_by_func(self.on_row_selected)
-                self.option_list.select_row(previous_row)
-                self.option_list.connect("row-selected", self.on_row_selected)
-
-        dialog.connect("response", on_response)
-        dialog.present()
-
     def commit_selection(self, index):
-        """Actually apply a selection (after any GPU warning has been resolved)."""
+        """Actually apply a selection."""
         print(f"DEBUG: Option {index} selected: {self.options[index]['name']}")
         self.selected_option = index
         self.detail_stack.set_visible_child_name(str(index))
@@ -440,7 +397,7 @@ class DEPicker(Gtk.Box):
         self.internet_notices = getattr(self, "internet_notices", {})
         self.internet_notices[index] = (notice_box, option.get("requires_internet", False))
 
-        # "Tryb Big Picture" switch - hidden for SteamOS (it already boots to Big Picture)
+        # "Tryb Big Picture" switch - hidden when bigpicture_capable is False (e.g. "none")
         if option.get("bigpicture_capable"):
             switch_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
             switch_row.set_halign(Gtk.Align.CENTER)
@@ -1016,8 +973,9 @@ chmod 644 "{config_file_de}" "{config_file_de_key}" "{config_file_updates}" "{co
 
     def refresh_ui(self):
         """Re-check internet and refresh the currently shown detail panel
-        (only SteamOS is internet-gated, and the sidebar rows themselves
-        don't need rebuilding - only the "Requires Internet" notice does)."""
+        (the sidebar rows themselves don't need rebuilding - only the
+        "Requires Internet" notice does, for any option with
+        requires_internet=True)."""
         self.has_internet = self.check_internet_connection()
         print(f"DEBUG: Refreshing UI. Internet status: {self.has_internet}")
 

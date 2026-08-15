@@ -879,105 +879,101 @@ class InstallationWidget(Gtk.Box):
 
     def _get_install_de_packages_command(self):
         """Generate a bash command (run inside arch-chroot, after add_users.sh)
-        that installs the package set for whichever DE was picked in
-        de_picker_widget.py, reading /de_selection_key ("plasma" / "gnome" /
-        "hyprland" / "steamos").
+        that keeps only the DE picked in de_picker_widget.py, reading
+        /de_selection_key ("plasma" / "gnome" / "hyprland" / "cinnamon" /
+        "none").
 
-        Plasma is assumed to already be baked into the base ISO (the
-        default), so nothing extra is installed for it here. The other three
-        install their packages at install time so a single ISO can offer all
-        of them without baking every desktop into every install. SteamOS
-        pulls gamescope-session-git / gamescope-session-steam-git from
-        Sebastian's own repo (arcos-repo) - these were deliberately removed
-        from packages.x86_64 so they only land on machines that actually
-        picked SteamOS.
+        Plasma, GNOME, Hyprland, and Cinnamon (plus all their display
+        managers) are ALL baked into packages.x86_64 and therefore already
+        present in the base image - this step just REMOVES (pacman -Rdd)
+        whichever ones weren't picked. That's deliberate: `pacman -R` only
+        touches the local package database, so this needs no `pacman -Sy`
+        and no network at all.
         """
         return r"""
-        exec > /tmp/de_install_debug.log 2>&1
+        # /tmp is a tmpfs on the installed system - anything written here
+        # during install is gone after the first reboot, which is exactly
+        # why this log looked "empty"/unavailable after the fact. /var/log
+        # is on the real root filesystem and survives reboots, so use that
+        # instead for anything meant to be inspected post-install.
+        exec > /var/log/de_install_debug.log 2>&1
         set -x
 
         SELECTION_FILE="/de_selection_key"
 
         if [ ! -f "$SELECTION_FILE" ]; then
-            echo "No de_selection_key file found, skipping DE package installation"
+            echo "No de_selection_key file found, skipping DE selection"
             exit 0
         fi
 
         SELECTION="$(cat "$SELECTION_FILE")"
-        echo "Installing packages for DE selection: $SELECTION"
+        echo "Selected DE: $SELECTION"
 
-        # Files baked into the live airootfs (icons, .desktop overrides, etc.)
-        # can collide with files a DE package ships under the same path -
-        # pacman refuses the whole transaction on any such conflict. --overwrite
-        # tells it to just replace those specific paths instead of aborting.
-        # This MUST be an array, not a plain string: an unquoted "*" in a
-        # string variable gets glob-expanded by bash to whatever happens to
-        # be in the current directory the moment it's invoked, silently
-        # mangling the whole pacman command.
-        PACMAN_INSTALL=(pacman -S --needed --noconfirm --overwrite='*')
-
-        # Only tear Plasma down AFTER the new DE's packages are confirmed
-        # installed - never before. If we removed Plasma first and the new
-        # DE's install then failed (file conflict, network hiccup, whatever),
-        # the machine was left with zero desktop environments and an empty
-        # session list at the login screen.
-        remove_plasma() {
-            echo "Removing Plasma (switched to $SELECTION)..."
-            systemctl disable sddm.service 2>/dev/null || true
-            pacman -Rdd --noconfirm plasma-meta plasma-desktop plasma-workspace \
-                kwin sddm 2>/dev/null || true
-            echo "✓ Plasma removed"
-        }
+        # Every DE's core packages, pre-installed via packages.x86_64.
+        PLASMA_CORE=(plasma-meta plasma-desktop plasma-workspace kwin)
+        GNOME_CORE=(gnome gnome-tweaks)
+        HYPRLAND_CORE=(hyprland waybar wofi kitty grim slurp swaync hyprpaper \
+            xdg-desktop-portal-hyprland polkit-kde-agent qt5-wayland qt6-wayland)
+        CINNAMON_CORE=(cinnamon)
 
         case "$SELECTION" in
             plasma)
-                echo "Plasma is part of the base image, nothing extra to install."
+                REMOVE_CORE=("${GNOME_CORE[@]}" "${HYPRLAND_CORE[@]}" "${CINNAMON_CORE[@]}")
+                REMOVE_DM=(gdm lightdm lightdm-gtk-greeter)
+                ENABLE_DM="sddm.service"
                 ;;
             gnome)
-                if "${PACMAN_INSTALL[@]}" gnome gnome-tweaks gdm; then
-                    systemctl enable gdm.service
-                    echo "✓ GDM enabled as display manager"
-                    remove_plasma
-                else
-                    echo "ERROR: GNOME package installation failed - keeping Plasma so the system still boots to something."
-                fi
+                REMOVE_CORE=("${PLASMA_CORE[@]}" "${HYPRLAND_CORE[@]}" "${CINNAMON_CORE[@]}")
+                REMOVE_DM=(sddm lightdm lightdm-gtk-greeter)
+                ENABLE_DM="gdm.service"
                 ;;
             hyprland)
-                if "${PACMAN_INSTALL[@]}" hyprland waybar wofi kitty grim slurp \
-                    swaync hyprpaper xdg-desktop-portal-hyprland polkit-kde-agent \
-                    qt5-wayland qt6-wayland sddm; then
-                    systemctl enable sddm.service
-                    echo "✓ SDDM enabled (Hyprland session selectable at login)"
-                    remove_plasma
-                else
-                    echo "ERROR: Hyprland package installation failed - keeping Plasma so the system still boots to something."
-                fi
+                # sddm is shared with plasma - only ever removed by the
+                # branches (gnome/cinnamon/none) where neither wants it.
+                REMOVE_CORE=("${PLASMA_CORE[@]}" "${GNOME_CORE[@]}" "${CINNAMON_CORE[@]}")
+                REMOVE_DM=(gdm lightdm lightdm-gtk-greeter)
+                ENABLE_DM="sddm.service"
                 ;;
-            steamos)
-                if "${PACMAN_INSTALL[@]}" gamescope-session-git gamescope-session-steam-git \
-                    gamescope steam mangohud; then
-                    # No display manager here on purpose: the "Big Picture
-                    # autologin" step further down wires tty1 autologin
-                    # straight into gamescope-session-plus for SteamOS.
-                    remove_plasma
-                else
-                    echo "ERROR: SteamOS package installation failed - keeping Plasma so the system still boots to something."
-                fi
+            cinnamon)
+                REMOVE_CORE=("${PLASMA_CORE[@]}" "${GNOME_CORE[@]}" "${HYPRLAND_CORE[@]}")
+                REMOVE_DM=(sddm gdm)
+                ENABLE_DM="lightdm.service"
+                ;;
+            none)
+                REMOVE_CORE=("${PLASMA_CORE[@]}" "${GNOME_CORE[@]}" "${HYPRLAND_CORE[@]}" "${CINNAMON_CORE[@]}")
+                REMOVE_DM=(sddm gdm lightdm lightdm-gtk-greeter)
+                ENABLE_DM=""
                 ;;
             *)
-                echo "Unknown de_selection_key '$SELECTION', skipping DE package installation"
+                echo "Unknown de_selection_key '$SELECTION', skipping DE selection"
+                exit 0
                 ;;
         esac
+
+        echo "Removing unused DE packages: ${REMOVE_CORE[*]} ${REMOVE_DM[*]}"
+        for dm in "${REMOVE_DM[@]}"; do
+            systemctl disable "${dm}.service" 2>/dev/null || true
+        done
+        pacman -Rdd --noconfirm "${REMOVE_CORE[@]}" "${REMOVE_DM[@]}" 2>/dev/null || true
+        echo "✓ Unused DEs removed"
+
+        if [ -n "$ENABLE_DM" ]; then
+            systemctl enable "$ENABLE_DM"
+            echo "✓ $ENABLE_DM enabled as display manager"
+        else
+            echo "No display manager enabled - system will boot to console"
+        fi
         """
 
     def _get_bigpicture_autostart_command(self):
         """Generate a bash command (run inside arch-chroot, after DE packages
         and the user are set up) that wires up the "Tryb Big Picture" toggle
-        from de_picker_widget.py for plasma/gnome/hyprland: Steam auto-starts
-        in Big Picture mode (-tenfoot) as soon as that desktop session logs
-        in. Reads /bigpicture_autostart ("1"/"0") and /de_selection_key.
-        No-op for SteamOS (it already boots straight to Big Picture) or if
-        the toggle was left off.
+        from de_picker_widget.py for plasma/gnome/cinnamon/hyprland: Steam
+        auto-starts in Big Picture mode (-tenfoot) as soon as that desktop
+        session logs in. Reads /bigpicture_autostart ("1"/"0") and
+        /de_selection_key. No-op for "none" (no desktop to autostart into -
+        the picker also hides the toggle for it) or if the toggle was left
+        off.
         """
         return r"""
         BP_FILE="/bigpicture_autostart"
@@ -990,11 +986,6 @@ class InstallationWidget(Gtk.Box):
 
         DE_SELECTION="$(cat "$DE_FILE" 2>/dev/null || echo unknown)"
 
-        if [ "$DE_SELECTION" = "steamos" ]; then
-            echo "SteamOS already boots straight to Big Picture, skipping autostart wiring"
-            exit 0
-        fi
-
         TARGET_USER="$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 {print $1; exit}')"
         if [ -z "$TARGET_USER" ]; then
             echo "Warning: could not detect target user, skipping Big Picture autostart"
@@ -1004,7 +995,7 @@ class InstallationWidget(Gtk.Box):
         echo "Wiring up Big Picture autostart for '$TARGET_USER' (DE: $DE_SELECTION)..."
 
         case "$DE_SELECTION" in
-            plasma|gnome)
+            plasma|gnome|cinnamon)
                 AUTOSTART_DIR="/home/${TARGET_USER}/.config/autostart"
                 mkdir -p "$AUTOSTART_DIR"
                 cat > "$AUTOSTART_DIR/steam-bigpicture.desktop" << 'DESKTOP'
@@ -1031,79 +1022,6 @@ DESKTOP
         esac
 
         echo "Big Picture autostart configured for '$TARGET_USER'."
-        """
-
-    def _get_bigpicture_autologin_command(self):
-        """Generate a bash command (run inside arch-chroot, after add_users.sh
-        and after gamescope-session packages are installed) that sets up
-        autologin straight into gamescope-session-plus (Steam Big Picture) if
-        the user picked "SteamOS" in de_picker_widget.py.
-
-        de_picker_widget.py now writes /tmp/installer_config/de_selection_key
-        as a string ("plasma" / "gnome" / "hyprland" / "steamos"). The
-        "Applying installer configuration" step already rsyncs
-        /tmp/installer_config/ into the target root, so by the time this runs
-        (inside the chroot) that file is simply /de_selection_key.
-        No-op if SteamOS wasn't selected or the file is missing.
-        """
-        return r"""
-        SELECTION_FILE="/de_selection_key"
-        STEAMOS_KEY="steamos"
-
-        if [ ! -f "$SELECTION_FILE" ]; then
-            echo "No de_selection_key file found, skipping Big Picture autologin setup"
-            exit 0
-        fi
-
-        SELECTION="$(cat "$SELECTION_FILE")"
-
-        if [ "$SELECTION" != "$STEAMOS_KEY" ]; then
-            echo "SteamOS not selected (got '$SELECTION'), skipping autologin setup"
-            exit 0
-        fi
-
-        # Auto-detect the human user created by add_users.sh (first regular UID)
-        TARGET_USER="$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 {print $1; exit}')"
-
-        if [ -z "$TARGET_USER" ]; then
-            echo "Warning: could not detect target user, skipping Big Picture autologin setup"
-            exit 0
-        fi
-
-        echo "Big Picture selected, configuring autologin for '$TARGET_USER'..."
-
-        mkdir -p /etc/systemd/system/getty@tty1.service.d
-        cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << AUTOLOGIN
-[Service]
-ExecStart=
-ExecStart=-/usr/bin/agetty --autologin ${TARGET_USER} --noclear %I \$TERM
-AUTOLOGIN
-
-        BASH_PROFILE="/home/${TARGET_USER}/.bash_profile"
-        touch "$BASH_PROFILE"
-
-        MARKER="# --- gamescope-bigpicture-autostart ---"
-        if ! grep -qF "$MARKER" "$BASH_PROFILE" 2>/dev/null; then
-            cat >> "$BASH_PROFILE" << 'PROFILE'
-
-# --- gamescope-bigpicture-autostart ---
-if [ -z "$DISPLAY" ] && [ "$XDG_VTNR" -eq 1 ]; then
-    exec gamescope-session-plus steam
-fi
-PROFILE
-        fi
-
-        chown "${TARGET_USER}:${TARGET_USER}" "$BASH_PROFILE"
-
-        # Autologin on tty1 and a display manager both fighting for VT1 breaks both.
-        systemctl disable sddm.service 2>/dev/null || true
-
-        if [ ! -x /usr/bin/gamescope-session-plus ]; then
-            echo "WARNING: /usr/bin/gamescope-session-plus not present in this system."
-            echo "Make sure the gamescope-session overlay + gamescope/steam/mangohud packages are baked into the ISO."
-        fi
-
-        echo "Big Picture autologin configured for '$TARGET_USER'."
         """
 
     def _get_copy_kernel_command(self):
@@ -1410,14 +1328,6 @@ PROFILE
             command=["sudo", "arch-chroot", "/tmp/arcos_installer/root", "bash", "-c", self._get_install_de_packages_command()],
             description="Installing the packages for the desktop environment selected in the installer",
             weight=5.0,
-            critical=False
-        ))
-
-        steps.append(InstallationStep(
-            label="Configuring Big Picture autologin",
-            command=["sudo", "arch-chroot", "/tmp/arcos_installer/root", "bash", "-c", self._get_bigpicture_autologin_command()],
-            description="Setting up boot-straight-to-Steam-Big-Picture if that option was selected",
-            weight=0.5,
             critical=False
         ))
 
