@@ -954,7 +954,7 @@ class InstallationWidget(Gtk.Box):
         for dm in "${REMOVE_DM[@]}"; do
             systemctl disable "${dm}.service" 2>/dev/null || true
         done
-        pacman -Rdd --noconfirm "${REMOVE_CORE[@]}" "${REMOVE_DM[@]}" 2>/dev/null || true
+        pacman -Rscn --noconfirm "${REMOVE_CORE[@]}" "${REMOVE_DM[@]}" 2>/dev/null || true
         echo "✓ Unused DEs removed"
 
         if [ -n "$ENABLE_DM" ]; then
