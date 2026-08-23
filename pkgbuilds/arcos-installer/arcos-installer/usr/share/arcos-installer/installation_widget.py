@@ -1358,6 +1358,14 @@ DESKTOP
         ))
 
         steps.append(InstallationStep(
+            label="Cleaning out rootfs",
+            command=["sudo", "arch-chroot", "/tmp/arcos_installer/root", "bash", "-c", "/post-install.sh"],
+            description="Cleaning out rootfs from LiveISO's config and applying post-install scripts",
+            weight=5.0,
+            critical=True
+        ))
+
+        steps.append(InstallationStep(
             label="Installing desktop environment packages",
             command=["sudo", "arch-chroot", "/tmp/arcos_installer/root", "bash", "-c", self._get_install_de_packages_command()],
             description="Installing the packages for the desktop environment selected in the installer",
@@ -1379,14 +1387,6 @@ DESKTOP
             description="Removing ucode for non-used x86_64 processor",
             weight=1.0,
             critical=False
-        ))
-
-        steps.append(InstallationStep(
-            label="Cleaning out rootfs",
-            command=["sudo", "arch-chroot", "/tmp/arcos_installer/root", "bash", "-c", "/post-install.sh"],
-            description="Cleaning out rootfs from LiveISO's config and applying post-install scripts",
-            weight=5.0,
-            critical=True
         ))
 
         steps.append(InstallationStep(

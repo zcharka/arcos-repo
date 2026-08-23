@@ -148,7 +148,6 @@ echo "Hidden=true" >> /usr/share/applications/bvnc.desktop 2>/dev/null || true
 echo "Hidden=true" >> /usr/share/applications/org.gnome.Extensions.desktop 2>/dev/null || true
 
 # Enable system services
-systemctl enable gdm 2>/dev/null || true
 systemctl enable bluetooth 2>/dev/null || true
 
 # Move and configure system files
