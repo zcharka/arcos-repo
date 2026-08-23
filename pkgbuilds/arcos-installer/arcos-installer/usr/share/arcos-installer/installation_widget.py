@@ -883,19 +883,13 @@ class InstallationWidget(Gtk.Box):
         /de_selection_key ("plasma" / "gnome" / "hyprland" / "cinnamon" /
         "none").
 
-        Plasma, GNOME, Hyprland, and Cinnamon (plus all their display
-        managers) are ALL baked into packages.x86_64 and therefore already
-        present in the base image - this step just REMOVES (pacman -Rdd)
-        whichever ones weren't picked. That's deliberate: `pacman -R` only
-        touches the local package database, so this needs no `pacman -Sy`
-        and no network at all.
+        All DEs and their display managers are baked into packages.x86_64
+        and already present on the installed system. This step REMOVES the
+        ones that weren't picked. We use 'pacman -Rdd --noconfirm' to force
+        removal ignoring dependency checks, removing each package one by one
+        so that a failure on one package doesn't block the rest.
         """
         return r"""
-        # /tmp is a tmpfs on the installed system - anything written here
-        # during install is gone after the first reboot, which is exactly
-        # why this log looked "empty"/unavailable after the fact. /var/log
-        # is on the real root filesystem and survives reboots, so use that
-        # instead for anything meant to be inspected post-install.
         exec > /var/log/de_install_debug.log 2>&1
         set -x
 
@@ -906,42 +900,58 @@ class InstallationWidget(Gtk.Box):
             exit 0
         fi
 
-        SELECTION="$(cat "$SELECTION_FILE")"
+        SELECTION="$(cat "$SELECTION_FILE" | tr -d '[:space:]')"
         echo "Selected DE: $SELECTION"
 
-        # Every DE's core packages, pre-installed via packages.x86_64.
-        PLASMA_CORE=(plasma-meta plasma-desktop plasma-workspace kwin)
-        GNOME_CORE=(gnome gnome-tweaks)
-        HYPRLAND_CORE=(hyprland waybar wofi kitty grim slurp swaync hyprpaper \
-            xdg-desktop-portal-hyprland polkit-kde-agent qt5-wayland qt6-wayland)
-        CINNAMON_CORE=(cinnamon)
+        # ── Package groups matching packages.x86_64 ──────────────────────
+        # Plasma (KDE) packages from packages.x86_64:
+        #   plasma-meta, sddm, konsole, dolphin, xdg-desktop-portal-kde,
+        #   kate, ark, gwenview, okular, spectacle, plasma-systemmonitor,
+        #   partitionmanager, kcalc
+        PLASMA_PKGS="plasma-meta sddm konsole dolphin xdg-desktop-portal-kde kate ark gwenview okular spectacle plasma-systemmonitor partitionmanager kcalc"
+
+        # GNOME packages from packages.x86_64:
+        #   gnome, gnome-tweaks, gdm
+        GNOME_PKGS="gnome gnome-tweaks gdm"
+
+        # Hyprland packages from packages.x86_64:
+        #   hyprland, waybar, wofi, kitty, grim, slurp, swaync, hyprpaper,
+        #   xdg-desktop-portal-hyprland
+        HYPRLAND_PKGS="hyprland waybar wofi kitty grim slurp swaync hyprpaper xdg-desktop-portal-hyprland"
+
+        # Cinnamon packages from packages.x86_64:
+        #   cinnamon, lightdm, lightdm-gtk-greeter
+        CINNAMON_PKGS="cinnamon lightdm lightdm-gtk-greeter"
+
+        # Display managers
+        DM_SDDM="sddm"
+        DM_GDM="gdm"
+        DM_LIGHTDM="lightdm lightdm-gtk-greeter"
+
+        REMOVE_PKGS=""
+        ENABLE_DM=""
 
         case "$SELECTION" in
             plasma)
-                REMOVE_CORE=("${GNOME_CORE[@]}" "${HYPRLAND_CORE[@]}" "${CINNAMON_CORE[@]}")
-                REMOVE_DM=(gdm lightdm lightdm-gtk-greeter)
+                REMOVE_PKGS="$GNOME_PKGS $HYPRLAND_PKGS $CINNAMON_PKGS"
                 ENABLE_DM="sddm.service"
                 ;;
             gnome)
-                REMOVE_CORE=("${PLASMA_CORE[@]}" "${HYPRLAND_CORE[@]}" "${CINNAMON_CORE[@]}")
-                REMOVE_DM=(sddm lightdm lightdm-gtk-greeter)
+                REMOVE_PKGS="$PLASMA_PKGS $HYPRLAND_PKGS $CINNAMON_PKGS"
                 ENABLE_DM="gdm.service"
                 ;;
             hyprland)
-                # sddm is shared with plasma - only ever removed by the
-                # branches (gnome/cinnamon/none) where neither wants it.
-                REMOVE_CORE=("${PLASMA_CORE[@]}" "${GNOME_CORE[@]}" "${CINNAMON_CORE[@]}")
-                REMOVE_DM=(gdm lightdm lightdm-gtk-greeter)
+                REMOVE_PKGS="$PLASMA_PKGS $GNOME_PKGS $CINNAMON_PKGS"
                 ENABLE_DM="sddm.service"
+                # Re-install sddm since it was in PLASMA_PKGS
+                # We'll handle this after removal
                 ;;
             cinnamon)
-                REMOVE_CORE=("${PLASMA_CORE[@]}" "${GNOME_CORE[@]}" "${HYPRLAND_CORE[@]}")
-                REMOVE_DM=(sddm gdm)
+                REMOVE_PKGS="$PLASMA_PKGS $GNOME_PKGS $HYPRLAND_PKGS"
                 ENABLE_DM="lightdm.service"
                 ;;
             none)
-                REMOVE_CORE=("${PLASMA_CORE[@]}" "${GNOME_CORE[@]}" "${HYPRLAND_CORE[@]}" "${CINNAMON_CORE[@]}")
-                REMOVE_DM=(sddm gdm lightdm lightdm-gtk-greeter)
+                REMOVE_PKGS="$PLASMA_PKGS $GNOME_PKGS $HYPRLAND_PKGS $CINNAMON_PKGS"
                 ENABLE_DM=""
                 ;;
             *)
@@ -950,16 +960,32 @@ class InstallationWidget(Gtk.Box):
                 ;;
         esac
 
-        echo "Removing unused DE packages: ${REMOVE_CORE[*]} ${REMOVE_DM[*]}"
-        for dm in "${REMOVE_DM[@]}"; do
-            systemctl disable "${dm}.service" 2>/dev/null || true
+        # Disable all display managers first
+        for dm_svc in sddm.service gdm.service lightdm.service; do
+            systemctl disable "$dm_svc" 2>/dev/null || true
         done
-        TARGETS=($(pacman -Qq "${REMOVE_CORE[@]}" "${REMOVE_DM[@]}" 2>/dev/null || true))
-        if [ ${#TARGETS[@]} -gt 0 ]; then
-            pacman -Rscn --noconfirm "${TARGETS[@]}" 2>/dev/null || true
-            echo "✓ Unused DEs removed"
-        else
-            echo "No unused DEs found to remove"
+
+        echo "Packages to remove: $REMOVE_PKGS"
+
+        # Remove each package individually with -Rdd (force, skip dep checks).
+        # This way one failure does not block the rest.
+        for pkg in $REMOVE_PKGS; do
+            if pacman -Qq "$pkg" &>/dev/null; then
+                echo "Removing: $pkg"
+                pacman -Rdd --noconfirm "$pkg" 2>/dev/null || echo "Warning: failed to remove $pkg"
+            else
+                echo "Skipping $pkg (not installed)"
+            fi
+        done
+        echo "✓ Unused DE packages removed"
+
+        # For hyprland: sddm was removed as part of PLASMA_PKGS,
+        # but hyprland needs it. Re-install from cache or repo.
+        if [ "$SELECTION" = "hyprland" ]; then
+            if ! pacman -Qq sddm &>/dev/null; then
+                echo "Re-installing sddm for Hyprland..."
+                pacman -S --noconfirm sddm 2>/dev/null || true
+            fi
         fi
 
         if [ -n "$ENABLE_DM" ]; then
