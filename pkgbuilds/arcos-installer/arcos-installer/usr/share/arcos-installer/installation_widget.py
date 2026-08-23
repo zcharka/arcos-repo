@@ -883,11 +883,10 @@ class InstallationWidget(Gtk.Box):
         /de_selection_key ("plasma" / "gnome" / "hyprland" / "cinnamon" /
         "none").
 
-        All DEs and their display managers are baked into packages.x86_64
-        and already present on the installed system. This step REMOVES the
-        ones that weren't picked. We use 'pacman -Rdd --noconfirm' to force
-        removal ignoring dependency checks, removing each package one by one
-        so that a failure on one package doesn't block the rest.
+        Key insight: in Arch Linux, 'gnome' is a package GROUP (not a real
+        package) — 'pacman -Qq gnome' returns nothing. 'plasma-meta' is a
+        metapackage whose removal leaves all KDE apps behind. This script
+        expands groups via 'pacman -Qqg' and metapackage deps before removal.
         """
         return r"""
         exec > /var/log/de_install_debug.log 2>&1
@@ -903,55 +902,79 @@ class InstallationWidget(Gtk.Box):
         SELECTION="$(cat "$SELECTION_FILE" | tr -d '[:space:]')"
         echo "Selected DE: $SELECTION"
 
-        # ── Package groups matching packages.x86_64 ──────────────────────
-        # Plasma (KDE) packages from packages.x86_64:
-        #   plasma-meta, sddm, konsole, dolphin, xdg-desktop-portal-kde,
-        #   kate, ark, gwenview, okular, spectacle, plasma-systemmonitor,
-        #   partitionmanager, kcalc
-        PLASMA_PKGS="plasma-meta sddm konsole dolphin xdg-desktop-portal-kde kate ark gwenview okular spectacle plasma-systemmonitor partitionmanager kcalc"
+        # ── Helper: expand a name to real installed packages ─────────────
+        # Handles: package groups (gnome), metapackages (plasma-meta),
+        #          and plain packages (hyprland).
+        expand_packages() {
+            local RESULT=""
+            for name in "$@"; do
+                # 1) Try as a group first (e.g. 'gnome')
+                local group_members
+                group_members="$(pacman -Qqg "$name" 2>/dev/null)"
+                if [ -n "$group_members" ]; then
+                    RESULT="$RESULT $group_members"
+                    continue
+                fi
+                # 2) If it's an installed package, add it directly
+                if pacman -Qq "$name" &>/dev/null; then
+                    RESULT="$RESULT $name"
+                    # 3) If it's a metapackage, also add its dependencies
+                    local deps
+                    deps="$(pacman -Qi "$name" 2>/dev/null | sed -n 's/^Depends On *: //p')"
+                    if [ -n "$deps" ] && [ "$deps" != "None" ]; then
+                        for dep in $deps; do
+                            # Strip version constraints like >=1.0
+                            dep="${dep%%[><=]*}"
+                            if pacman -Qq "$dep" &>/dev/null; then
+                                RESULT="$RESULT $dep"
+                            fi
+                        done
+                    fi
+                fi
+            done
+            echo "$RESULT"
+        }
 
-        # GNOME packages from packages.x86_64:
-        #   gnome, gnome-tweaks, gdm
-        GNOME_PKGS="gnome gnome-tweaks gdm"
-
-        # Hyprland packages from packages.x86_64:
-        #   hyprland, waybar, wofi, kitty, grim, slurp, swaync, hyprpaper,
-        #   xdg-desktop-portal-hyprland
-        HYPRLAND_PKGS="hyprland waybar wofi kitty grim slurp swaync hyprpaper xdg-desktop-portal-hyprland"
-
-        # Cinnamon packages from packages.x86_64:
-        #   cinnamon, lightdm, lightdm-gtk-greeter
-        CINNAMON_PKGS="cinnamon lightdm lightdm-gtk-greeter"
-
-        # Display managers
-        DM_SDDM="sddm"
-        DM_GDM="gdm"
-        DM_LIGHTDM="lightdm lightdm-gtk-greeter"
-
-        REMOVE_PKGS=""
+        # ── What to remove for each selection ────────────────────────────
+        REMOVE_NAMES=""
         ENABLE_DM=""
 
         case "$SELECTION" in
             plasma)
-                REMOVE_PKGS="$GNOME_PKGS $HYPRLAND_PKGS $CINNAMON_PKGS"
+                # Keep: plasma-meta, sddm, KDE apps
+                # Remove: gnome group + gdm + gnome-tweaks,
+                #         hyprland + tools,
+                #         cinnamon + lightdm
+                REMOVE_NAMES="gnome gnome-tweaks gdm hyprland waybar wofi kitty grim slurp swaync hyprpaper xdg-desktop-portal-hyprland cinnamon lightdm lightdm-gtk-greeter"
                 ENABLE_DM="sddm.service"
                 ;;
             gnome)
-                REMOVE_PKGS="$PLASMA_PKGS $HYPRLAND_PKGS $CINNAMON_PKGS"
+                # Keep: gnome group, gdm, gnome-tweaks
+                # Remove: plasma-meta + sddm + KDE apps,
+                #         hyprland + tools,
+                #         cinnamon + lightdm
+                REMOVE_NAMES="plasma-meta sddm konsole dolphin xdg-desktop-portal-kde kate ark gwenview okular spectacle plasma-systemmonitor partitionmanager kcalc hyprland waybar wofi kitty grim slurp swaync hyprpaper xdg-desktop-portal-hyprland cinnamon lightdm lightdm-gtk-greeter"
                 ENABLE_DM="gdm.service"
                 ;;
             hyprland)
-                REMOVE_PKGS="$PLASMA_PKGS $GNOME_PKGS $CINNAMON_PKGS"
+                # Keep: hyprland + tools, sddm
+                # Remove: plasma-meta + KDE apps (but NOT sddm),
+                #         gnome group + gdm + gnome-tweaks,
+                #         cinnamon + lightdm
+                REMOVE_NAMES="plasma-meta konsole dolphin xdg-desktop-portal-kde kate ark gwenview okular spectacle plasma-systemmonitor partitionmanager kcalc gnome gnome-tweaks gdm cinnamon lightdm lightdm-gtk-greeter"
                 ENABLE_DM="sddm.service"
-                # Re-install sddm since it was in PLASMA_PKGS
-                # We'll handle this after removal
                 ;;
             cinnamon)
-                REMOVE_PKGS="$PLASMA_PKGS $GNOME_PKGS $HYPRLAND_PKGS"
+                # Keep: cinnamon, lightdm
+                # Remove: plasma-meta + sddm + KDE apps,
+                #         gnome group + gdm + gnome-tweaks,
+                #         hyprland + tools
+                REMOVE_NAMES="plasma-meta sddm konsole dolphin xdg-desktop-portal-kde kate ark gwenview okular spectacle plasma-systemmonitor partitionmanager kcalc gnome gnome-tweaks gdm hyprland waybar wofi kitty grim slurp swaync hyprpaper xdg-desktop-portal-hyprland"
                 ENABLE_DM="lightdm.service"
                 ;;
             none)
-                REMOVE_PKGS="$PLASMA_PKGS $GNOME_PKGS $HYPRLAND_PKGS $CINNAMON_PKGS"
+                # Remove everything
+                REMOVE_NAMES="plasma-meta sddm konsole dolphin xdg-desktop-portal-kde kate ark gwenview okular spectacle plasma-systemmonitor partitionmanager kcalc gnome gnome-tweaks gdm hyprland waybar wofi kitty grim slurp swaync hyprpaper xdg-desktop-portal-hyprland cinnamon lightdm lightdm-gtk-greeter"
                 ENABLE_DM=""
                 ;;
             *)
@@ -965,26 +988,34 @@ class InstallationWidget(Gtk.Box):
             systemctl disable "$dm_svc" 2>/dev/null || true
         done
 
-        echo "Packages to remove: $REMOVE_PKGS"
+        # Expand groups and metapackages to real package names
+        REAL_PKGS="$(expand_packages $REMOVE_NAMES)"
+        # Deduplicate
+        REAL_PKGS="$(echo "$REAL_PKGS" | tr ' ' '\n' | sort -u | tr '\n' ' ')"
 
-        # Remove each package individually with -Rdd (force, skip dep checks).
-        # This way one failure does not block the rest.
-        for pkg in $REMOVE_PKGS; do
+        echo "Expanded packages to remove: $REAL_PKGS"
+
+        # Count how many are actually installed
+        INSTALLED=""
+        for pkg in $REAL_PKGS; do
             if pacman -Qq "$pkg" &>/dev/null; then
-                echo "Removing: $pkg"
-                pacman -Rdd --noconfirm "$pkg" 2>/dev/null || echo "Warning: failed to remove $pkg"
-            else
-                echo "Skipping $pkg (not installed)"
+                INSTALLED="$INSTALLED $pkg"
             fi
         done
-        echo "✓ Unused DE packages removed"
 
-        # For hyprland: sddm was removed as part of PLASMA_PKGS,
-        # but hyprland needs it. Re-install from cache or repo.
-        if [ "$SELECTION" = "hyprland" ]; then
-            if ! pacman -Qq sddm &>/dev/null; then
-                echo "Re-installing sddm for Hyprland..."
-                pacman -S --noconfirm sddm 2>/dev/null || true
+        if [ -z "$INSTALLED" ]; then
+            echo "No packages to remove"
+        else
+            echo "Removing installed packages:$INSTALLED"
+            pacman -Rdd --noconfirm $INSTALLED 2>/dev/null || true
+            echo "✓ Unused DE packages removed"
+
+            # Clean up orphaned dependencies left behind
+            ORPHANS="$(pacman -Qdtq 2>/dev/null || true)"
+            if [ -n "$ORPHANS" ]; then
+                echo "Cleaning orphaned dependencies..."
+                pacman -Rns --noconfirm $ORPHANS 2>/dev/null || true
+                echo "✓ Orphans cleaned"
             fi
         fi
 
