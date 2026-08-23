@@ -489,7 +489,7 @@ class MainWindow(Adw.ApplicationWindow):
 
 class Installer(Adw.Application):
     def __init__(self):
-        super().__init__(application_id="github.petexy.arcosinstaller")
+        super().__init__(application_id="github.zcharka.arcosinstaller")
 
     def do_activate(self):
         win = MainWindow(self)
