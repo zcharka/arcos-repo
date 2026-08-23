@@ -1,0 +1,14 @@
+NAME="ArcOS"
+PRETTY_NAME="ArcOS"
+ID=arcos
+ID_LIKE=arch
+BUILD_ID=rolling
+VERSION_ID="1.0"
+ANSI_COLOR="38;2;23;147;209"
+
+HOME_URL="https://github.com/zcharka/ArcOS"
+DOCUMENTATION_URL="https://zcharka.github.io/ArcOS/documentation"
+SUPPORT_URL="https://bbs.archlinux.org/"
+BUG_REPORT_URL="https://github.com/zcharka/ArcOS/issues"
+
+LOGO=arcos-logo

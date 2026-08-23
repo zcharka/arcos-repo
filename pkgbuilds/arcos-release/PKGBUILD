@@ -1,0 +1,11 @@
+pkgname=arcos-release
+pkgver=1.0
+pkgrel=1
+pkgdesc="ArcOS system identification files"
+arch=('any')
+license=('GPL3')
+
+package() {
+    install -Dm644 "$startdir/root/etc/os-release" \
+        "$pkgdir/etc/os-release"
+}
