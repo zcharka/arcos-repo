@@ -886,6 +886,10 @@ class InstallationTemplateWidget(Gtk.Box):
                 GLib.idle_add(self.progress_dialog.set_body, _("Initializing disk partition table..."))
                 label_type = "gpt" if boot_mode == "uefi" else "msdos"
                 
+                # Turn off swap and unmount everything on this disk before wiping
+                subprocess.run(['sudo', 'swapoff', '-a'], capture_output=True)
+                subprocess.run(f"for p in {parent_disk}*; do sudo umount -l $p 2>/dev/null; done", shell=True, capture_output=True)
+                
                 # Create fresh partition table
                 subprocess.run(['sudo', 'parted', '-s', parent_disk, 'mklabel', label_type], check=True)
                 subprocess.run(['sudo', 'partprobe', parent_disk])
@@ -900,7 +904,7 @@ class InstallationTemplateWidget(Gtk.Box):
             if item_type == 'partition':
                 GLib.idle_add(self.progress_dialog.set_body, _("Unmounting partition..."))
                 subprocess.run(['sudo', 'umount', target_device], capture_output=True)
-                subprocess.run(['sudo', 'umount', f"{target_device}*"], capture_output=True)
+                subprocess.run(f"sudo umount {target_device}* 2>/dev/null", shell=True, capture_output=True)
                 subprocess.run(['sudo', 'swapoff', '-a'], capture_output=True)
 
                 # Delete Old Partition

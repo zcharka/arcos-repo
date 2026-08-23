@@ -1,0 +1,43 @@
+Opis wyglądu i budowy instalatora ArcOS dla innego modelu AI:
+
+Architektura i Narzędzia:
+1. Framework: Aplikacja jest napisana w języku Python z użyciem bibliotek GTK4 i libadwaita (poprzez PyGObject).
+2. Układ (Layout): Wykorzystuje się `Adw.Clamp` (np. z `maximum_size=800`), aby scentrować główną zawartość okna i zapobiec jej nadmiernemu rozciąganiu. Główne sekcje zbudowane są w oparciu o pionowe i poziome kontenery `Gtk.Box` z odpowiednimi marginesami (`margin_top`, `margin_bottom`, `spacing`).
+3. Wybór Środowiska (Split Layout): Ekran wyboru DE jest podzielony na dwie części za pomocą `Gtk.Box`. Z lewej strony znajduje się `Gtk.ScrolledWindow` z `Gtk.ListBox` (lista opcji z ikonami), z prawej - `Gtk.Stack` z poszczególnymi ekranami dla wybranej opcji. `Gtk.Stack` posiada włączoną animację przejścia: `set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)` z czasem `set_transition_duration(220)`.
+
+Style i CSS:
+Aplikacja ma wbudowany niestandardowy arkusz CSS ładowany przez `Gtk.CssProvider` i podłączany do `Gdk.Display`.
+Kluczowe klasy CSS dla przycisków:
+- `.back_button` / `.continue_button`: Mają zaokrąglone rogi (`border-radius: 20px`), pogrubioną czcionkę (`font-weight: bold`), oraz cień tekstu (`text-shadow: 0 1px 2px rgba(0,0,0,0.1)`). Posiadają płynne przejścia `transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)`.
+- Efekty Hover (Najechanie): Przy najechaniu myszką przyciski "podnoszą się" (`transform: translateY(-2px)`) i generują cień (np. `box-shadow: 0 4px 15px alpha(@theme_bg_color, 0.3)` dla `.back_button` oraz `alpha(@accent_color, 0.3)` dla `.continue_button`).
+- Efekty Active (Kliknięcie): Przyciski wracają na pozycję (`transform: translateY(0px)`).
+
+Animacje (Hover z Gtk.EventControllerMotion):
+Do przycisków przypięty jest kontroler `Gtk.EventControllerMotion`. Kiedy kursor wchodzi na obszar przycisku, dodawana jest klasa `.pulse-animation`. Kiedy kursor opuszcza przycisk - klasa jest usuwana.
+Animacja "pulse" w CSS:
+```css
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+.pulse-animation {
+    animation: pulse 2s ease-in-out infinite;
+}
+```
+
+Typografia i Elementy Natywne Adwaita:
+- Tytuły ustawiane są przeważnie przez Pango Markup, np.: `<span size="xx-large" weight="bold">Tytuł</span>`.
+- Często stosuje się standardowe klasy Adwaita: `.title-1`, `.heading`, `.body`, `.dim-label` (dla wyszarzonego tekstu).
+- Zastosowano również wbudowane klasy przycisków: `.suggested-action` (główny przycisk, najczęściej niebieski/akcentowany) i `.destructive-action` (przycisk anulowania/czerwony).
+
+Wskaźniki ładowania i logi:
+- W instalatorze użyty jest `Gtk.Spinner` do kręcącej się ikony ładowania (np. 32x32) oraz `Gtk.ProgressBar` dla paska postępu.
+- Okno logów wbudowano używając `Gtk.Revealer` z animacją `SLIDE_DOWN`, ukryte pod przyciskiem ("View Installation Log").
+- Logi wyświetlane są w `Gtk.TextView` (z klasą CSS `.console`), wpisane w `Gtk.ScrolledWindow`. Bufor tekstu (`Gtk.TextBuffer`) definiuje tagi kolorystyczne (`Gtk.TextTag`) z określoną czcionką (`monospace`) oraz wagą. Kolory tagów: komendy na niebiesko (`#62a0ea` pogrubione), sukces na zielono (`#57e389`), błąd na czerwono (`#ff7b63`) oraz info na żółto (`#f6d32d`).
+
+Ikony:
+- Mniejsze ikony systemowe pobierane są poprzez `Gtk.Image.new_from_icon_name("system-run-symbolic")`.
+- Duże, własne ikony ładuje się przez tekstury GDK do `Gtk.Picture` z zachowaniem `Gtk.ContentFit.CONTAIN` i obsługą zmniejszania (`set_can_shrink(True)`), wspierane przez awaryjne (fallback) ikony oparte o zwykłe Emodzi np. "🖥️" renderowane jako `Gtk.Label` wewnątrz `Gtk.Overlay`.
+
+Aby odtworzyć identycznie wyglądającą aplikację, należy dokładnie odtworzyć te warstwy (layouty typu Box, Stack z animacjami, Adw.Clamp dla szerokości) oraz wdrożyć pokazany wyżej Provider CSS wraz z kontrolerami myszy (EventControllerMotion).

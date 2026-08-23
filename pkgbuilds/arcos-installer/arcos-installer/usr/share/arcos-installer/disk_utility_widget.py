@@ -2077,6 +2077,11 @@ class DiskUtilityWidget(Gtk.Box):
             if boot_mode == "uefi":
                 # UEFI mode: Create GPT with ESP and root partitions
                 # Step 1: Create GPT partition table
+                
+                # Turn off swap and unmount everything on this disk before wiping
+                subprocess.run(['sudo', 'swapoff', '-a'], capture_output=True)
+                subprocess.run(f"for p in {self.selected_disk}*; do sudo umount -l $p 2>/dev/null; done", shell=True, capture_output=True)
+                
                 cmd = ['sudo', 'parted', '-s', self.selected_disk, 'mklabel', 'gpt']
                 process = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                 if process.returncode != 0:
@@ -2143,6 +2148,11 @@ class DiskUtilityWidget(Gtk.Box):
             else:
                 # Legacy mode: Create MBR with single bootable root partition
                 # Step 1: Create MBR partition table
+                
+                # Turn off swap and unmount everything on this disk before wiping
+                subprocess.run(['sudo', 'swapoff', '-a'], capture_output=True)
+                subprocess.run(f"for p in {self.selected_disk}*; do sudo umount -l $p 2>/dev/null; done", shell=True, capture_output=True)
+                
                 cmd = ['sudo', 'parted', '-s', self.selected_disk, 'mklabel', 'msdos']
                 process = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                 if process.returncode != 0:
