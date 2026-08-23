@@ -1567,7 +1567,12 @@ DESKTOP
             GLib.idle_add(self._update_step_info, step, i)
 
             # Log command execution - PUSH TO QUEUE
-            self.output_queue.put((f"$ {' '.join(step.command)}", "command"))
+            # For inline bash scripts (bash -c "..."), show only the step label
+            # instead of dumping the entire script source into the terminal.
+            cmd_display = ' '.join(step.command)
+            if 'bash' in step.command and '-c' in step.command:
+                cmd_display = f"{step.label}"
+            self.output_queue.put((f"$ {cmd_display}", "command"))
 
             try:
                 # Execute command.
