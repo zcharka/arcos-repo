@@ -883,10 +883,9 @@ class InstallationWidget(Gtk.Box):
         /de_selection_key ("plasma" / "gnome" / "hyprland" / "cinnamon" /
         "none").
 
-        Key insight: in Arch Linux, 'gnome' is a package GROUP (not a real
-        package) — 'pacman -Qq gnome' returns nothing. 'plasma-meta' is a
-        metapackage whose removal leaves all KDE apps behind. This script
-        expands groups via 'pacman -Qqg' and metapackage deps before removal.
+        Removes all unselected DE packages using explicit package lists,
+        cleans orphan dependencies, and cleans up unselected session files
+        so login managers only show the chosen desktop.
         """
         return r"""
         exec > /var/log/de_install_debug.log 2>&1
@@ -902,80 +901,50 @@ class InstallationWidget(Gtk.Box):
         SELECTION="$(cat "$SELECTION_FILE" | tr -d '[:space:]')"
         echo "Selected DE: $SELECTION"
 
-        # ── Helper: expand a name to real installed packages ─────────────
-        # Handles: package groups (gnome), metapackages (plasma-meta),
-        #          and plain packages (hyprland).
-        expand_packages() {
-            local RESULT=""
-            for name in "$@"; do
-                # 1) Try as a group first (e.g. 'gnome')
-                local group_members
-                group_members="$(pacman -Qqg "$name" 2>/dev/null)"
-                if [ -n "$group_members" ]; then
-                    RESULT="$RESULT $group_members"
-                    continue
-                fi
-                # 2) If it's an installed package, add it directly
-                if pacman -Qq "$name" &>/dev/null; then
-                    RESULT="$RESULT $name"
-                    # 3) If it's a metapackage, also add its dependencies
-                    local deps
-                    deps="$(pacman -Qi "$name" 2>/dev/null | sed -n 's/^Depends On *: //p')"
-                    if [ -n "$deps" ] && [ "$deps" != "None" ]; then
-                        for dep in $deps; do
-                            # Strip version constraints like >=1.0
-                            dep="${dep%%[><=]*}"
-                            if pacman -Qq "$dep" &>/dev/null; then
-                                RESULT="$RESULT $dep"
-                            fi
-                        done
-                    fi
-                fi
-            done
-            echo "$RESULT"
-        }
+        # Explicit list of GNOME packages & GDM
+        GNOME_PKGS="gnome gnome-extra gnome-tweaks gdm xdg-desktop-portal-gnome baobab cheese eog epiphany evince file-roller gnome-backgrounds gnome-calculator gnome-calendar gnome-characters gnome-clocks gnome-color-manager gnome-console gnome-contacts gnome-control-center gnome-disk-utility gnome-font-viewer gnome-keyring gnome-logs gnome-maps gnome-music gnome-remote-desktop gnome-session gnome-settings-daemon gnome-shell gnome-shell-extensions gnome-software gnome-system-monitor gnome-text-editor gnome-tour gnome-user-docs gnome-user-share grilo-plugins loupe nautilus orca rygel snapshot sushi tecla totem tracker-miners gnome-bluetooth-3.0 mutter"
 
-        # ── What to remove for each selection ────────────────────────────
-        REMOVE_NAMES=""
+        # Explicit list of Cinnamon packages & LightDM
+        CINNAMON_PKGS="cinnamon cinnamon-control-center cinnamon-desktop cinnamon-menus cinnamon-screensaver cinnamon-session cinnamon-settings-daemon cmoffload nemo cjs muffin lightdm lightdm-gtk-greeter"
+
+        # Explicit list of Hyprland packages
+        HYPRLAND_PKGS="hyprland waybar wofi kitty grim slurp swaync hyprpaper xdg-desktop-portal-hyprland hyprland-qtutils hyprlang hyprcursor hyprutils"
+
+        # Explicit list of Plasma/KDE packages (excluding sddm)
+        PLASMA_PKGS="plasma-meta plasma-desktop plasma-workspace kwin breeze discover drkonqi kde-cli-tools kde-gtk-config kpipewire kscreen kscreenlocker kspacebar ksystemstats kwallet-pam kwayland-integration layer-shell-qt libkscreen libksysguard milou ocean-sound-theme oxygen oxygen-sounds plasma-disks plasma-firewall plasma-integration plasma-nm plasma-pa plasma-sdk plasma-systemmonitor plasma-thunderbolt plasma-vault plasma-welcome polkit-kde-agent powerdevil qqc2-breeze-style sddm-kcm systemsettings user-manager xdg-desktop-portal-kde konsole dolphin kate ark gwenview okular spectacle partitionmanager kcalc"
+
+        # Display Managers
+        SDDM_PKG="sddm"
+
+        REMOVE_PKGS=""
         ENABLE_DM=""
+        KEEP_SESSION_PATTERN=""
 
         case "$SELECTION" in
             plasma)
-                # Keep: plasma-meta, sddm, KDE apps
-                # Remove: gnome group + gdm + gnome-tweaks,
-                #         hyprland + tools,
-                #         cinnamon + lightdm
-                REMOVE_NAMES="gnome gnome-tweaks gdm hyprland waybar wofi kitty grim slurp swaync hyprpaper xdg-desktop-portal-hyprland cinnamon lightdm lightdm-gtk-greeter"
+                REMOVE_PKGS="$GNOME_PKGS $CINNAMON_PKGS $HYPRLAND_PKGS"
                 ENABLE_DM="sddm.service"
+                KEEP_SESSION_PATTERN="plasma"
                 ;;
             gnome)
-                # Keep: gnome group, gdm, gnome-tweaks
-                # Remove: plasma-meta + sddm + KDE apps,
-                #         hyprland + tools,
-                #         cinnamon + lightdm
-                REMOVE_NAMES="plasma-meta sddm konsole dolphin xdg-desktop-portal-kde kate ark gwenview okular spectacle plasma-systemmonitor partitionmanager kcalc hyprland waybar wofi kitty grim slurp swaync hyprpaper xdg-desktop-portal-hyprland cinnamon lightdm lightdm-gtk-greeter"
+                REMOVE_PKGS="$PLASMA_PKGS $SDDM_PKG $CINNAMON_PKGS $HYPRLAND_PKGS"
                 ENABLE_DM="gdm.service"
+                KEEP_SESSION_PATTERN="gnome"
                 ;;
             hyprland)
-                # Keep: hyprland + tools, sddm
-                # Remove: plasma-meta + KDE apps (but NOT sddm),
-                #         gnome group + gdm + gnome-tweaks,
-                #         cinnamon + lightdm
-                REMOVE_NAMES="plasma-meta konsole dolphin xdg-desktop-portal-kde kate ark gwenview okular spectacle plasma-systemmonitor partitionmanager kcalc gnome gnome-tweaks gdm cinnamon lightdm lightdm-gtk-greeter"
+                REMOVE_PKGS="$PLASMA_PKGS $GNOME_PKGS $CINNAMON_PKGS"
                 ENABLE_DM="sddm.service"
+                KEEP_SESSION_PATTERN="hyprland"
                 ;;
             cinnamon)
-                # Keep: cinnamon, lightdm
-                # Remove: plasma-meta + sddm + KDE apps,
-                #         gnome group + gdm + gnome-tweaks,
-                #         hyprland + tools
-                REMOVE_NAMES="plasma-meta sddm konsole dolphin xdg-desktop-portal-kde kate ark gwenview okular spectacle plasma-systemmonitor partitionmanager kcalc gnome gnome-tweaks gdm hyprland waybar wofi kitty grim slurp swaync hyprpaper xdg-desktop-portal-hyprland"
+                REMOVE_PKGS="$PLASMA_PKGS $SDDM_PKG $GNOME_PKGS $HYPRLAND_PKGS"
                 ENABLE_DM="lightdm.service"
+                KEEP_SESSION_PATTERN="cinnamon"
                 ;;
             none)
-                # Remove everything
-                REMOVE_NAMES="plasma-meta sddm konsole dolphin xdg-desktop-portal-kde kate ark gwenview okular spectacle plasma-systemmonitor partitionmanager kcalc gnome gnome-tweaks gdm hyprland waybar wofi kitty grim slurp swaync hyprpaper xdg-desktop-portal-hyprland cinnamon lightdm lightdm-gtk-greeter"
+                REMOVE_PKGS="$PLASMA_PKGS $SDDM_PKG $GNOME_PKGS $CINNAMON_PKGS $HYPRLAND_PKGS"
                 ENABLE_DM=""
+                KEEP_SESSION_PATTERN="none"
                 ;;
             *)
                 echo "Unknown de_selection_key '$SELECTION', skipping DE selection"
@@ -988,37 +957,40 @@ class InstallationWidget(Gtk.Box):
             systemctl disable "$dm_svc" 2>/dev/null || true
         done
 
-        # Expand groups and metapackages to real package names
-        REAL_PKGS="$(expand_packages $REMOVE_NAMES)"
-        # Deduplicate
-        REAL_PKGS="$(echo "$REAL_PKGS" | tr ' ' '\n' | sort -u | tr '\n' ' ')"
-
-        echo "Expanded packages to remove: $REAL_PKGS"
-
-        # Count how many are actually installed
-        INSTALLED=""
-        for pkg in $REAL_PKGS; do
+        # Remove each unwanted package using pacman -Rdd
+        for pkg in $REMOVE_PKGS; do
             if pacman -Qq "$pkg" &>/dev/null; then
-                INSTALLED="$INSTALLED $pkg"
+                echo "Removing package: $pkg"
+                pacman -Rdd --noconfirm "$pkg" 2>/dev/null || echo "Warning: failed to remove $pkg"
+            fi
+        done
+        echo "✓ Selected DE packages removed"
+
+        # Remove orphaned packages left behind
+        ORPHANS="$(pacman -Qdtq 2>/dev/null || true)"
+        if [ -n "$ORPHANS" ]; then
+            echo "Cleaning orphaned packages: $ORPHANS"
+            pacman -Rns --noconfirm $ORPHANS 2>/dev/null || true
+            echo "✓ Orphaned packages removed"
+        fi
+
+        # Clean up stray session files in /usr/share/wayland-sessions and /usr/share/xsessions
+        for sess_dir in /usr/share/wayland-sessions /usr/share/xsessions; do
+            if [ -d "$sess_dir" ]; then
+                for f in "$sess_dir"/*.desktop; do
+                    [ -e "$f" ] || continue
+                    base="$(basename "$f" | tr '[:upper:]' '[:lower:]')"
+                    if [ "$KEEP_SESSION_PATTERN" = "none" ]; then
+                        rm -f "$f"
+                    elif [[ "$base" != *"$KEEP_SESSION_PATTERN"* ]]; then
+                        echo "Removing unselected session file: $f"
+                        rm -f "$f"
+                    fi
+                done
             fi
         done
 
-        if [ -z "$INSTALLED" ]; then
-            echo "No packages to remove"
-        else
-            echo "Removing installed packages:$INSTALLED"
-            pacman -Rdd --noconfirm $INSTALLED 2>/dev/null || true
-            echo "✓ Unused DE packages removed"
-
-            # Clean up orphaned dependencies left behind
-            ORPHANS="$(pacman -Qdtq 2>/dev/null || true)"
-            if [ -n "$ORPHANS" ]; then
-                echo "Cleaning orphaned dependencies..."
-                pacman -Rns --noconfirm $ORPHANS 2>/dev/null || true
-                echo "✓ Orphans cleaned"
-            fi
-        fi
-
+        # Enable the chosen Display Manager
         if [ -n "$ENABLE_DM" ]; then
             systemctl enable "$ENABLE_DM"
             echo "✓ $ENABLE_DM enabled as display manager"
