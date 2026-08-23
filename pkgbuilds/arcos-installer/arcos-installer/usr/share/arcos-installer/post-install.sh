@@ -221,29 +221,6 @@ pacman -R archinstall --noconfirm 2>/dev/null || true
 pacman -R arcos-installer --noconfirm 2>/dev/null || true
 pacman -R gparted --noconfirm 2>/dev/null || true
 
-#Kinexin Update
-check_de_selection() {
-    if [[ ! -f "$DE_SELECTION_FILE" ]]; then
-        print_error "DE selection file not found at $DE_SELECTION_FILE"
-        return 2
-    fi
-    
-    local de_value
-    de_value=$(cat "$DE_SELECTION_FILE" 2>/dev/null | tr -d '[:space:]')
-    
-    if [[ "$de_value" == "0" ]]; then
-        print_msg "DE selection: ArcOS"
-        return 0
-    elif [[ "$de_value" == "1" ]]; then
-        print_msg "DE selection: Kinexin"
-        pacman -Sy kinexin-desktop --noconfirm --overwrite '*'
-        pacman -Rsc gnome --noconfirm 
-        return 0
-    else
-        print_error "Invalid DE selection value: '$de_value'. Expected 0 or 1"
-        return 2
-    fi
-}
 
 is_flatpak_selected() {
     local flatpak_id="$1"
@@ -387,7 +364,6 @@ if check_internet; then
         print_msg "Updates disabled by user, skipping system update (pacman -Syu)..."
     fi
     
-    check_de_selection
     update_kinexin_plasma_launchers
 else
     print_warning "No internet connection available, skipping package updates"
@@ -401,6 +377,6 @@ mkinitcpio -P
 
 flatpak override --filesystem=xdg-config/gtk-4.0:ro
 flatpak override --filesystem=xdg-config/gtk-3.0:ro
+install_flatpaks
 
-
-print_msg "Post-installation configuration completed successfully!"
+print_msg "ArcOS post-installation configuration completed successfully."
