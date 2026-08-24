@@ -1511,6 +1511,15 @@ DESKTOP
         ))
 
         steps.append(InstallationStep(
+            label="Installing GRUB theme",
+            command=["sudo", "arch-chroot", "/tmp/arcos_installer/root", "bash", "-c",
+                     "if [ -f /usr/share/grub/themes/grub-evodevo-main/install.sh ]; then bash /usr/share/grub/themes/grub-evodevo-main/install.sh; fi"],
+            description="Installing GRUB theme (EvoDevo)",
+            weight=1.0,
+            critical=False
+        ))
+
+        steps.append(InstallationStep(
             label="Unmounting filesystems",
 
             command=["sudo", "bash", "-c",
