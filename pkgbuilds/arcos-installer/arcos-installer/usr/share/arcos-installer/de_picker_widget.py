@@ -742,13 +742,6 @@ chmod 644 "{config_file_de}" "{config_file_de_key}" "{config_file_updates}" "{co
                 "type": "flatpak",
                 "essential": False,
             },
-            "app.twintaillauncher.ttl": {
-                "name": "Twin Tail Launcher",
-                "description": "Game launcher",
-                "category": "Flatpak Apps",
-                "type": "flatpak",
-                "essential": False,
-            },
             "com.heroicgameslauncher.hgl": {
                 "name": "Heroic Games Launcher",
                 "description": "Open source game launcher for GOG and Epic Games",
