@@ -1,0 +1,32 @@
+# Maintainer: Petexy <https://github.com/Petexy>
+
+pkgname=arc-store
+pkgver=1.0.0
+pkgrel=1
+pkgdesc='Arc Store - a graphical package manager for pacman and the AUR'
+url='https://github.com/Petexy'
+arch=('any')
+license=('GPL-3.0')
+depends=(
+  'python-gobject'
+  'gtk4'
+  'libadwaita'
+  'python'
+)
+optdepends=(
+  'flatpak: install Flatpak apps alongside system packages'
+  'paru: faster/automated AUR builds (falls back to makepkg otherwise)'
+  'webkitgtk-6.0: show live Arch Wiki pages inside the package detail view'
+)
+
+package() {
+    cd "${srcdir}"
+
+    find usr -type f | while IFS= read -r _file; do
+        if [[ "${_file}" == usr/bin/* ]]; then
+            install -Dm755 "${_file}" "${pkgdir}/${_file}"
+        else
+            install -Dm644 "${_file}" "${pkgdir}/${_file}"
+        fi
+    done
+}
