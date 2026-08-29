@@ -1,43 +1,856 @@
-Opis wyglądu i budowy instalatora ArcOS dla innego modelu AI:
+# Specyfikacja implementacyjna: wygląd, animacje, ikony i autoryzacja dla aplikacji Python + GTK4 + libadwaita
 
-Architektura i Narzędzia:
-1. Framework: Aplikacja jest napisana w języku Python z użyciem bibliotek GTK4 i libadwaita (poprzez PyGObject).
-2. Układ (Layout): Wykorzystuje się `Adw.Clamp` (np. z `maximum_size=800`), aby scentrować główną zawartość okna i zapobiec jej nadmiernemu rozciąganiu. Główne sekcje zbudowane są w oparciu o pionowe i poziome kontenery `Gtk.Box` z odpowiednimi marginesami (`margin_top`, `margin_bottom`, `spacing`).
-3. Wybór Środowiska (Split Layout): Ekran wyboru DE jest podzielony na dwie części za pomocą `Gtk.Box`. Z lewej strony znajduje się `Gtk.ScrolledWindow` z `Gtk.ListBox` (lista opcji z ikonami), z prawej - `Gtk.Stack` z poszczególnymi ekranami dla wybranej opcji. `Gtk.Stack` posiada włączoną animację przejścia: `set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)` z czasem `set_transition_duration(220)`.
+## Jak używać tego dokumentu
 
-Style i CSS:
-Aplikacja ma wbudowany niestandardowy arkusz CSS ładowany przez `Gtk.CssProvider` i podłączany do `Gdk.Display`.
-Kluczowe klasy CSS dla przycisków:
-- `.back_button` / `.continue_button`: Mają zaokrąglone rogi (`border-radius: 20px`), pogrubioną czcionkę (`font-weight: bold`), oraz cień tekstu (`text-shadow: 0 1px 2px rgba(0,0,0,0.1)`). Posiadają płynne przejścia `transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)`.
-- Efekty Hover (Najechanie): Przy najechaniu myszką przyciski "podnoszą się" (`transform: translateY(-2px)`) i generują cień (np. `box-shadow: 0 4px 15px alpha(@theme_bg_color, 0.3)` dla `.back_button` oraz `alpha(@accent_color, 0.3)` dla `.continue_button`).
-- Efekty Active (Kliknięcie): Przyciski wracają na pozycję (`transform: translateY(0px)`).
+To **nie jest opis żadnego konkretnego programu**. To specyfikacja warstwy wyglądu i mechanizmów, którą ma odziedziczyć nowo pisany program — niezależnie od tego, co ten program ma faktycznie robić. Poniżej znajdują się gotowe do wklejenia klasy/funkcje Pythona, dokładne stałe liczbowe i twarde reguły.
 
-Animacje (Hover z Gtk.EventControllerMotion):
-Do przycisków przypięty jest kontroler `Gtk.EventControllerMotion`. Kiedy kursor wchodzi na obszar przycisku, dodawana jest klasa `.pulse-animation`. Kiedy kursor opuszcza przycisk - klasa jest usuwana.
-Animacja "pulse" w CSS:
+**Sposób użycia:** wklej ten dokument w całości jako polecenie dla AI piszącego kod (Claude Code, inny agent), razem z osobnym opisem funkcji/logiki, jaką ma mieć Twój program. Podział obowiązków:
+- **Ty dostarczasz:** co program ma robić (funkcje, dane, przepływ).
+- **Ten dokument dostarcza:** jak ma wyglądać, jak się ma poruszać, jak ma prosić o hasło root/sudo.
+- **AI implementujące ma:** trzymać się poniższych stałych i fragmentów kodu dosłownie, chyba że jawnie oznaczono coś jako parametr do dostosowania.
+
+---
+
+## 1. Stos technologiczny — wymagany bez wyjątków
+
+```python
+import gi
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+gi.require_version("Graphene", "1.0")     # tylko jeśli używasz ScaleBin z sekcji 5
+gi.require_version("GdkPixbuf", "2.0")    # tylko jeśli ładujesz ikony rastrowe
+from gi.repository import Gtk, Adw, GLib, Gdk, GdkPixbuf, Graphene, Pango
+```
+
+Zależności systemowe (Arch/pacman): `python`, `python-gobject`, `gtk4`, `libadwaita`. Jeśli program ma czytać CPU/RAM/dysk lub nazwę dystrybucji, dołóż `python-psutil` i `python-distro`.
+
+**Twarda reguła:** klasa głównej aplikacji dziedziczy po `Adw.Application`, nie po zwykłym `Gtk.Application`. Główne okno dziedziczy po `Adw.ApplicationWindow` albo `Gtk.ApplicationWindow` — jeśli używasz `Adw.NavigationSplitView`/`Adw.ToolbarView`, wymagane jest to drugie z `self.set_content(...)`.
+
+---
+
+## 2. Zasady designu — twarde reguły kolorów i CSS
+
+1. **Nigdy nie wpisuj kolorów na sztywno** dla elementów UI (tło, tekst, obramowania przycisków/kart/listy). Używaj wyłącznie aliasów libadwaita, które same przełączają się z motywem systemowym i kolorem akcentu:
+   `@accent_color`, `@accent_bg_color`, `@accent_fg_color`, `@window_bg_color`, `@warning_color`, `@destructive_bg_color`.
+   Jedyny dopuszczalny wyjątek: duże, czysto dekoracyjne tło (np. gradient za karuzelą zrzutów ekranu) — tam wolno wpisać hex, bo to świadomy element marki, a nie komponent interfejsu.
+2. Każdy własny arkusz stylów ładuj tak:
+   ```python
+   def apply_css(css: str):
+       provider = Gtk.CssProvider()
+       if hasattr(provider, "load_from_string"):
+           provider.load_from_string(css)
+       else:  # starsze GTK < 4.12
+           provider.load_from_data(css.encode("utf-8"))
+       Gtk.StyleContext.add_provider_for_display(
+           Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+       )
+   ```
+   Nie podnoś priorytetu powyżej `APPLICATION`, chyba że świadomie chcesz nadpisać `~/.config/gtk-4.0/gtk.css` użytkownika (patrz pkt 4).
+3. Używaj gotowych klas Adwaity zamiast wymyślać własne, gdziekolwiek się da: `card`, `boxed-list`, `flat`, `circular`, `pill`, `dim-label`, `title-1`…`title-4`, `heading`, `caption`, `suggested-action`, `destructive-action`, `navigation-sidebar`.
+4. **Detekcja środowiska przed inicjalizacją GTK** — jeśli program ma wyglądać dobrze zarówno na GNOME, jak i KDE Plasma/Hyprland:
+   ```python
+   import os
+   def detect_desktop_environment():
+       combined = (os.environ.get("XDG_CURRENT_DESKTOP", "") + " " +
+                   os.environ.get("XDG_SESSION_DESKTOP", "")).upper()
+       if "KDE" in combined or "PLASMA" in combined:
+           return "plasma"
+       if "HYPRLAND" in combined:
+           return "hyprland"
+       return "gnome"
+   ```
+   Na `"gnome"` używaj `window.set_content(widget)` (dekoracje po stronie klienta). Na `"plasma"`/`"hyprland"` użyj `window.set_child(widget)` (dekoracje po stronie serwera) i rozważ doklejenie przezroczystego tła pod sidebar, żeby wtapiał się w panel kompozytora — wtedy ładuj ten fragment CSS z priorytetem `Gtk.STYLE_PROVIDER_PRIORITY_USER + 1`, żeby wygrał z arkuszem użytkownika.
+
+### Arkusz stylów bazowych (do wklejenia i rozszerzania)
+
 ```css
-@keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
+/* Nagłówek zlewający się z tłem okna */
+headerbar.flat {
+    min-height: 0; padding-top: 3px; padding-bottom: 3px;
+    background: transparent; border: none; box-shadow: none;
 }
-.pulse-animation {
-    animation: pulse 2s ease-in-out infinite;
+.dim-label { opacity: 0.6; }
+.navigation-sidebar row { margin-bottom: 6px; }
+
+/* Stan zablokowany podczas operacji uprzywilejowanej (sekcja 6) */
+widget:insensitive { opacity: 0.3; }
+.command-locked { background: alpha(@warning_color, 0.1); }
+
+/* Karty / siatki elementów w stylu GNOME Software */
+.app-card { border-radius: 12px; }
+.app-grid > flowboxchild { border-radius: 12px; padding: 0; }
+.highlight-section {
+    background-color: alpha(@accent_bg_color, 0.08);
+    border: 1px solid alpha(@accent_bg_color, 0.30);
+    border-radius: 14px; padding: 10px;
+}
+.badge {
+    background-color: @accent_bg_color; color: @accent_fg_color;
+    border-radius: 9999px; padding: 1px 9px; font-size: 0.68em; font-weight: 800;
+}
+.pill-action { border-radius: 9999px; padding-left: 14px; padding-right: 14px; }
+
+/* Kompaktowy pasek ikon (sekcja 4.3) */
+.compact-icon-btn { min-width: 40px; min-height: 40px; padding: 6px; border-radius: 10px; margin: 2px; }
+.compact-icon-btn:hover { background: alpha(@accent_color, 0.15); }
+.compact-icon-selected { background: alpha(@accent_color, 0.25); }
+.compact-icon-selected:hover { background: alpha(@accent_color, 0.35); }
+
+/* Animowane wejście/wyjście wierszy listy (sekcja 4.4) */
+.row-enter-prep { opacity: 0; transform: translateX(-12px) scale(0.95); }
+.row-enter {
+    opacity: 1; transform: translateX(0) scale(1);
+    transition: opacity 300ms cubic-bezier(0.0,0.0,0.2,1),
+                transform 400ms cubic-bezier(0.34,1.56,0.64,1);
+}
+.row-exit { opacity: 0.6; transform: scale(0.97); transition: opacity 250ms ease-out, transform 250ms ease-out; }
+.row-dragging { opacity: 0.4; }
+.drop-above { border-top: 2px solid @accent_color; }
+.drop-below { border-bottom: 2px solid @accent_color; }
+```
+
+---
+
+## 3. Ikony
+
+### 3.1 Reguły
+
+- Rozmiar ikon w listach/sidebarze: **32px**. W kartach/nagłówkach większych elementów: **36–48px**.
+- SVG ładuj bezpośrednio (`Gtk.Image.set_from_file`). Rastry (PNG/JPG) **zawsze** przez `GdkPixbuf → Gdk.Texture → Gtk.Image.new_from_paintable` — nigdy przez przestarzałe `Gtk.Image.new_from_pixbuf`.
+- Zawsze miej fallback na symboliczną ikonę systemową (np. `application-x-addon-symbolic`, `utilities-terminal-symbolic`, `web-browser-symbolic`) gdyby plik nie istniał.
+- Jeśli tworzysz własne ikony aplikacji: jeden spójny motyw/maskotka + zaokrąglony kwadrat („squircle”, promień ~10% szerokości) jako kształt bazowy, z indywidualnym akcentem koloru per funkcja — to standard GNOME/Adwaita.
+
+### 3.2 Gotowa funkcja ładująca
+
+```python
+import os
+from gi.repository import Gtk, Gdk, GdkPixbuf
+
+ICON_SIZE = 32
+
+def load_icon(icon_path_or_name: str, size: int = ICON_SIZE,
+              fallback: str = "application-x-addon-symbolic") -> Gtk.Image:
+    """SVG -> wprost z pliku. Raster -> Pixbuf -> Gdk.Texture -> Gtk.Image
+    (poprawna ścieżka w GTK4). Brak pliku / błąd -> potraktuj jako nazwę
+    ikony motywu systemowego, a jak i to zawiedzie -> fallback."""
+    if icon_path_or_name and os.path.isfile(icon_path_or_name):
+        try:
+            if icon_path_or_name.lower().endswith(".svg"):
+                image = Gtk.Image()
+                image.set_from_file(icon_path_or_name)
+            else:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(icon_path_or_name, size, size)
+                texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+                image = Gtk.Image.new_from_paintable(texture)
+            image.set_pixel_size(size)
+            return image
+        except Exception:
+            pass
+    image = Gtk.Image.new_from_icon_name(icon_path_or_name or fallback)
+    image.set_pixel_size(size)
+    return image
+```
+
+---
+
+## 4. Animacje — gotowe, wklejalne komponenty
+
+Cały „język ruchu”: **szybkie, ucięte wyjścia** (ease-in) + **sprężyste, lekko przeregulowane wejścia** (spring/ease-out-back). Nic nie znika/pojawia się instant — ale nic też nie trwa dłużej niż ok. 400ms.
+
+### 4.1 `ScaleBin` — skalowanie zawartości bez zmiany layoutu
+
+GTK nie ma property `scale` na zwykłym widgecie. To generyczny kontener, który skaluje dziecko wyłącznie na etapie rysowania (nic pod nim „nie skacze”):
+
+```python
+from gi.repository import Gtk, Graphene
+
+class ScaleBin(Gtk.Widget):
+    """Przezroczysty kontener 1-dzieckowy, który rysuje dziecko przeskalowane
+    wokół własnego środka. Layout/allocation dziecka się nie zmienia — tylko
+    malowanie. Używaj do animowania 'oddechu' całych sekcji UI."""
+
+    def __init__(self):
+        super().__init__()
+        self._child = None
+        self._scale = 1.0
+
+    def set_child(self, child):
+        if child is self._child:
+            return
+        if self._child is not None:
+            self._child.unparent()
+        self._child = child
+        if child is not None:
+            child.set_parent(self)
+
+    def set_scale(self, scale):
+        if scale != self._scale:
+            self._scale = scale
+            self.queue_draw()
+
+    def do_measure(self, orientation, for_size):
+        if self._child is None:
+            return (0, 0, -1, -1)
+        return self._child.measure(orientation, for_size)
+
+    def do_size_allocate(self, width, height, baseline):
+        if self._child is not None:
+            self._child.allocate(width, height, baseline, None)
+
+    def do_snapshot(self, snapshot):
+        if self._child is None:
+            return
+        if self._scale == 1.0:
+            self.snapshot_child(self._child, snapshot)
+            return
+        cx, cy = self.get_width() * 0.5, self.get_height() * 0.5
+        snapshot.save()
+        snapshot.translate(Graphene.Point().init(cx, cy))
+        snapshot.scale(self._scale, self._scale)
+        snapshot.translate(Graphene.Point().init(-cx, -cy))
+        self.snapshot_child(self._child, snapshot)
+        snapshot.restore()
+
+    def do_dispose(self):
+        if self._child is not None:
+            self._child.unparent()
+            self._child = None
+        Gtk.Widget.do_dispose(self)
+```
+
+### 4.2 Sprężyste przejście układu (np. zmiana breakpointu szerokości)
+
+Użyj z `ScaleBin`. Faza wyjścia: 110ms, ease-in-cubic. Faza wejścia: sprężyna z przeregulowaniem (damping 0.62 < 1 → widoczne „odbicie”).
+
+```python
+from gi.repository import Adw
+
+def play_exit_then_spring_enter(body, scale_bin, on_swap_content):
+    """Dwufazowe przejście układu:
+    1) stary układ znika (fade+shrink do 0, 110ms, EASE_IN_CUBIC)
+    2) on_swap_content() faktycznie podmienia zawartość
+    3) nowy układ wjeżdża sprężyście (spring, przeregulowanie)
+    Respektuje naturalnie ustawienie 'ogranicz animacje' systemu, bo
+    korzysta z Adw.TimedAnimation/Adw.SpringAnimation."""
+
+    def on_exit_value(value, *_):
+        body.set_opacity(value)
+        scale_bin.set_scale(0.96 + 0.04 * value)
+
+    def on_enter_value(value, *_):
+        body.set_opacity(max(0.0, min(1.0, value)))
+        scale_bin.set_scale(0.90 + 0.10 * value)
+
+    def after_exit(anim):
+        on_swap_content()
+        target = Adw.CallbackAnimationTarget.new(on_enter_value)
+        params = Adw.SpringParams.new(0.62, 1.0, 300.0)  # damping ratio, masa, sztywność
+        spring = Adw.SpringAnimation.new(body, 0.0, 1.0, params, target)
+        spring.set_epsilon(0.001)
+        spring.play()
+
+    target = Adw.CallbackAnimationTarget.new(on_exit_value)
+    exit_anim = Adw.TimedAnimation.new(body, 1.0, 0.0, 110, target)
+    exit_anim.set_easing(Adw.Easing.EASE_IN_CUBIC)
+    exit_anim.connect("done", after_exit)
+    exit_anim.play()
+```
+Podłącz pod `Adw.BreakpointBin` + `Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 1100px"))` (próg 1100px to sprawdzona wartość wyjściowa — dostosuj do treści). Ogranicz maksymalną szerokość treści przez `Adw.Clamp` (`set_maximum_size(1300)`, `set_tightening_threshold(1000)`), żeby na ultraszerokich ekranach karty się nie rozjeżdżały.
+
+**Uwaga o widgetach niezamapowanych:** jeśli `body` może być akurat schowany (np. w niewidocznej karcie stosu) w momencie zmiany layoutu, pomiń fazę wyjścia — podmień zawartość od razu i odegraj tylko `spring` po ponownym zamapowaniu widgetu (`body.connect("map", ...)`), bo animacja na niewidocznym widgecie kończy się natychmiast zamiast się odtworzyć.
+
+### 4.3 „Oddychające” hover/press na dowolnym elemencie (logo, ikona, karta)
+
+Prosta animacja klatka po klatce — bez potrzeby żadnej biblioteki easing. Każda klatka przesuwa wartość o ułamek dystansu do celu:
+
+```python
+from gi.repository import Gtk
+
+class HoverBreatheController:
+    """Podpina hover+press 'oddech' rozmiaru do dowolnego Gtk.Image osadzonego
+    w kontenerze `shell`. base/hover/press w px, ease = ułamek dystansu
+    pokonywany na klatkę (0.20 = sprawdzona wartość: szybko, ale płynnie)."""
+
+    def __init__(self, shell: Gtk.Widget, image: Gtk.Image, *,
+                 base=88.0, hover=96.0, press=78.0, ease=0.20):
+        self.shell, self.image = shell, image
+        self.base, self.hover_size, self.press_size, self.ease = base, hover, press, ease
+        self.size = base
+        self.target = base
+        self.hovered = self.pressed = False
+        self.tick_id = 0
+
+        motion = Gtk.EventControllerMotion()
+        motion.connect("enter", self._on_enter)
+        motion.connect("leave", self._on_leave)
+        shell.add_controller(motion)
+
+        click = Gtk.GestureClick()
+        click.set_button(0)
+        click.connect("pressed", self._on_pressed)
+        click.connect("released", self._on_released)
+        shell.add_controller(click)
+
+    def _retarget(self):
+        self.target = self.press_size if self.pressed else (self.hover_size if self.hovered else self.base)
+        if not self.tick_id:
+            self.tick_id = self.shell.add_tick_callback(self._tick)
+
+    def _on_enter(self, *_):    self.hovered = True;  self._retarget()
+    def _on_leave(self, *_):    self.hovered = False; self.pressed = False; self._retarget()
+    def _on_pressed(self, *_):  self.pressed = True;  self._retarget()
+    def _on_released(self, *_): self.pressed = False; self._retarget()
+
+    def _tick(self, widget, frame_clock):
+        self.size += (self.target - self.size) * self.ease
+        self.image.set_pixel_size(max(1, round(self.size)))
+        if abs(self.target - self.size) < 0.35:
+            self.size = self.target
+            self.image.set_pixel_size(max(1, round(self.size)))
+            self.tick_id = 0
+            return False
+        return True
+```
+
+### 4.4 Falująca animacja listy (staggered enter/exit)
+
+Do trybu edycji, filtrowania, dowolnego momentu, gdy lista elementów ma się pojawić/zniknąć — zamiast naraz, każdy wiersz z niewielkim opóźnieniem względem poprzedniego. Wymaga klas `.row-enter-prep` / `.row-enter` / `.row-exit` z arkusza w sekcji 2.
+
+```python
+from gi.repository import GLib
+
+def stagger_reveal(rows, *, base_delay_ms=60, stride_ms=40, settle_ms=400):
+    for row in rows:
+        row.add_css_class("row-enter-prep")
+
+    def reveal(row):
+        row.remove_css_class("row-enter-prep")
+        row.add_css_class("row-enter")
+        GLib.timeout_add(settle_ms, lambda: row.remove_css_class("row-enter") or False)
+        return False
+
+    for i, row in enumerate(rows):
+        GLib.timeout_add(base_delay_ms + i * stride_ms, reveal, row)
+
+def stagger_dismiss(rows, on_all_done, *, stride_ms=30, buffer_ms=350):
+    for i, row in enumerate(rows):
+        GLib.timeout_add(i * stride_ms, lambda r=row: r.add_css_class("row-exit") or False)
+    GLib.timeout_add(len(rows) * stride_ms + buffer_ms, lambda: on_all_done() or False)
+```
+
+### 4.5 Zwężanie/rozszerzanie panelu bocznego + obrót przycisku-strzałki
+
+Animacja liczbowej szerokości `Adw.NavigationSplitView` (nie samego widgetu), z podmianą treści dokładnie w połowie drogi, plus synchroniczny obrót ikony strzałki realizowany przez **przepisywanie CSS co klatkę** (bo GTK CSS nie umie animować `transform: rotate()` na podstawie zmiennej Python):
+
+```python
+from gi.repository import Gtk, Adw
+
+class CompactSidebarAnimator:
+    def __init__(self, split_view, toggle_btn, *,
+                 width_normal=330, width_compact=62, duration_ms=350):
+        self.split_view, self.toggle_btn = split_view, toggle_btn
+        self.width_normal, self.width_compact, self.duration_ms = width_normal, width_compact, duration_ms
+        self.rotation_deg = 180.0
+        self._rotate_css = Gtk.CssProvider()
+        toggle_btn.get_style_context().add_provider(
+            self._rotate_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1
+        )
+        self._apply_rotation(self.rotation_deg)
+
+    def _apply_width(self, w):
+        self.split_view.set_min_sidebar_width(int(w))
+        self.split_view.set_max_sidebar_width(int(w))
+
+    def _apply_rotation(self, deg):
+        css = f".compact-toggle-btn {{ transition: none; transform: rotate({deg}deg); }}"
+        self._rotate_css.load_from_data(css.encode())
+
+    def set_compact(self, compact: bool, on_swap_content):
+        w_from = self.width_compact if compact else self.width_normal
+        w_to = self.width_normal if compact else self.width_compact
+        # (uwaga: przy wejściu w tryb kompaktowy w_from=normal, w_to=compact — dopasuj kolejność wywołań)
+        deg_to = 0.0 if compact else 180.0
+
+        target_r = Adw.CallbackAnimationTarget.new(self._apply_rotation)
+        rotate_anim = Adw.TimedAnimation.new(self.toggle_btn, self.rotation_deg, deg_to, self.duration_ms, target_r)
+        rotate_anim.set_easing(Adw.Easing.EASE_IN_OUT_CUBIC)
+        rotate_anim.connect("done", lambda *_: setattr(self, "rotation_deg", deg_to))
+        rotate_anim.play()
+
+        mid = (self.width_normal + self.width_compact) / 2.0
+        swapped = [False]
+        def on_tick(v, *_):
+            self._apply_width(v)
+            crossed = (v <= mid) if compact else (v >= mid)
+            if not swapped[0] and crossed:
+                swapped[0] = True
+                on_swap_content()
+
+        target_w = Adw.CallbackAnimationTarget.new(on_tick)
+        width_anim = Adw.TimedAnimation.new(
+            self.split_view, float(self.width_normal if compact else self.width_compact),
+            float(self.width_compact if compact else self.width_normal), self.duration_ms, target_w
+        )
+        width_anim.set_easing(Adw.Easing.EASE_IN_OUT_CUBIC)
+        width_anim.play()
+```
+
+### 4.6 Przejścia `Gtk.Stack`
+
+Dla głównego kontenera treści: `stack.set_transition_type(Gtk.StackTransitionType.SLIDE_UP_DOWN)`, `stack.set_transition_duration(300)`. Dla przełączania między dwoma "widokami" tego samego elementu (np. karuzela ↔ pasek postępu): `Gtk.StackTransitionType.CROSSFADE`.
+
+### 4.7 Tabela referencyjna krzywych i czasów
+
+| Element | Czas | Krzywa |
+|---|---|---|
+| Wyjście przy zmianie layoutu | 110ms | `Adw.Easing.EASE_IN_CUBIC` |
+| Wejście przy zmianie layoutu | do ustabilizowania (`epsilon=0.001`) | `Adw.SpringParams(0.62, 1.0, 300.0)` |
+| Szerokość sidebaru + obrót strzałki | 350ms | `Adw.Easing.EASE_IN_OUT_CUBIC` |
+| Opacity wiersza listy (wejście) | 300ms | `cubic-bezier(0.0,0.0,0.2,1)` |
+| Transform wiersza listy (wejście) | 400ms | `cubic-bezier(0.34,1.56,0.64,1)` (przeregulowanie) |
+| Wyjście wiersza listy | 250ms | `ease-out` |
+| „Oddech” logo/ikony | ciągła, klatka po klatce | lerp `× 0.20`/klatkę |
+| Główny `Gtk.Stack` | 300ms | `SLIDE_UP_DOWN` |
+
+**Twarda reguła:** wszystkie animacje idą przez `Adw.TimedAnimation`/`Adw.SpringAnimation`/CSS `transition` — nigdy przez ręczne `time.sleep` w pętli. To automatycznie honoruje systemowe ustawienie „ogranicz animacje” (accessibility).
+
+---
+
+## 5. Prompt o hasło root/sudo — kompletny, gotowy moduł
+
+**Twarda reguła:** żadna operacja wymagająca uprawnień administratora nie woła gołego `subprocess.run(["sudo", ...])`. Zawsze przez poniższy mechanizm. Nie używaj `pkexec`/PolicyKit, chyba że jawnie o to poproszono — poniższy wzorzec daje pełną kontrolę nad wyglądem promptu i mieści się w jednym spójnym stylu Adwaita.
+
+### 5.1 `auth/sudo_manager.py`
+
+```python
+import os, subprocess, tempfile, threading, atexit
+from typing import Optional
+
+class SudoManager:
+    """Singleton, który raz uwierzytelnia hasło i pozwala uruchamiać
+    polecenia z rootem BEZ wpisywania hasła w linię poleceń (nie widać go w
+    `ps aux`) i BEZ zapisu na dysk. Hasło płynie przez prywatny named pipe
+    (FIFO), czytany przez sudo za pomocą mechanizmu SUDO_ASKPASS."""
+
+    _instance: Optional["SudoManager"] = None
+
+    @classmethod
+    def get_instance(cls) -> "SudoManager":
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def __init__(self):
+        self.user_password = None
+        self._running = True
+
+        askpass_tf = tempfile.NamedTemporaryFile(delete=False, prefix="app-askpass-")
+        self.askpass_script = askpass_tf.name
+        askpass_tf.close()
+
+        wrapper_tf = tempfile.NamedTemporaryFile(delete=False, prefix="app-sudo-")
+        self.wrapper_path = wrapper_tf.name
+        wrapper_tf.close()
+
+        self.fifo_dir = tempfile.mkdtemp(prefix="app-pipe-")
+        self.fifo_path = os.path.join(self.fifo_dir, "password_pipe")
+        os.mkfifo(self.fifo_path, 0o600)
+
+        self._setup_scripts()
+
+        self._feed_condition = threading.Condition()
+        self._feeds_allowed = 0
+        self.feeder_thread = threading.Thread(target=self._feed_pipe_loop, daemon=True)
+        self.feeder_thread.start()
+        atexit.register(self.cleanup)
+
+    def _setup_scripts(self):
+        with open(self.askpass_script, "w") as f:
+            f.write(f'#!/bin/sh\ncat "{self.fifo_path}"\n')
+        os.chmod(self.askpass_script, 0o700)
+        with open(self.wrapper_path, "w") as f:
+            f.write("#!/bin/sh\n"
+                    f"export SUDO_ASKPASS='{self.askpass_script}'\n"
+                    'exec sudo -A "$@"\n')
+        os.chmod(self.wrapper_path, 0o700)
+
+    def _feed_pipe_loop(self):
+        """Wątek w tle: pisze hasło do FIFO TYLKO gdy ktoś podniósł
+        _feeds_allowed. Otwarcie FIFO do zapisu blokuje się, dopóki sudo -A
+        (przez askpass_script) nie otworzy go do odczytu — obie strony
+        'spotykają się' dokładnie w momencie, gdy sudo naprawdę pyta o
+        hasło."""
+        while self._running:
+            with self._feed_condition:
+                self._feed_condition.wait_for(lambda: self._feeds_allowed > 0 or not self._running)
+            if not self._running:
+                break
+            if self.user_password:
+                try:
+                    fd = os.open(self.fifo_path, os.O_WRONLY)
+                    with os.fdopen(fd, "w") as f:
+                        f.write(str(self.user_password) + "\n")
+                    with self._feed_condition:
+                        if self._feeds_allowed > 0:
+                            self._feeds_allowed -= 1
+                except OSError:
+                    pass
+            else:
+                with self._feed_condition:
+                    if self._feeds_allowed > 0:
+                        self._feeds_allowed -= 1
+
+    def validate_password(self, password: str) -> bool:
+        """Natychmiastowa walidacja przez `sudo -S -v` (hasło na stdin) —
+        NIE uruchamia jeszcze niczego uprzywilejowanego. Dzięki temu dialog
+        może pokazać 'złe hasło' zanim się w ogóle zamknie."""
+        if not password:
+            return False
+        subprocess.run(["sudo", "-k"], check=False)
+        result = subprocess.run(
+            ["sudo", "-S", "-v"], input=password + "\n",
+            capture_output=True, text=True, env={**os.environ, "LC_ALL": "C"},
+        )
+        return result.returncode == 0
+
+    def set_password(self, password: str):
+        self.user_password = password
+
+    def run_privileged(self, cmd: list, **kwargs):
+        """cmd np. ['pacman', '-S', '--noconfirm', 'nazwa-pakietu']."""
+        if not self.user_password:
+            raise ValueError("Brak hasła — najpierw validate_password()+set_password()")
+        with self._feed_condition:
+            self._feeds_allowed += 1
+            self._feed_condition.notify_all()
+        try:
+            return subprocess.run([self.wrapper_path] + cmd, **kwargs)
+        finally:
+            self._drain_pipe()
+
+    def start_privileged_session(self):
+        """Otwórz 'bramkę' na wiele odczytów naraz — użyj wokół bloku kodu,
+        który sam odpala kilka pod-procesów wymagających roota."""
+        if not self.user_password:
+            return
+        with self._feed_condition:
+            self._feeds_allowed = 1000
+            self._feed_condition.notify_all()
+
+    def stop_privileged_session(self):
+        with self._feed_condition:
+            self._feeds_allowed = 0
+        self._drain_pipe()
+
+    def _drain_pipe(self):
+        with self._feed_condition:
+            remaining = self._feeds_allowed
+        if remaining > 0:
+            try:
+                fd = os.open(self.fifo_path, os.O_RDONLY | os.O_NONBLOCK)
+                os.read(fd, 1024)
+                os.close(fd)
+            except Exception:
+                pass
+
+    def forget_password(self):
+        """Wołaj po KAŻDEJ zakończonej operacji uprzywilejowanej."""
+        self.user_password = None
+        subprocess.run(["sudo", "-k"], check=False)
+
+    def cleanup(self):
+        self._running = False
+        self.forget_password()
+        for p in (self.askpass_script, self.wrapper_path, self.fifo_path):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+        try:
+            os.rmdir(self.fifo_dir)
+        except OSError:
+            pass
+
+
+def get_sudo_manager() -> SudoManager:
+    return SudoManager.get_instance()
+```
+
+### 5.2 Dialog — `prompt_password()`
+
+```python
+from gi.repository import Gtk, Adw
+
+def prompt_password(parent_window, message: str, on_success, primary_label="Authenticate"):
+    """Adw.MessageDialog + Gtk.PasswordEntry. on_success() jest wołane
+    TYLKO gdy sudo -S -v zaakceptuje wpisane hasło."""
+    manager = get_sudo_manager()
+
+    dialog = Adw.MessageDialog(heading="Authentication Required", body=message, transient_for=parent_window)
+    dialog.add_response("cancel", "Cancel")
+    dialog.add_response("go", primary_label)
+    dialog.set_response_appearance("go", Adw.ResponseAppearance.SUGGESTED)
+    dialog.set_default_response("go")
+
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+    entry = Gtk.PasswordEntry(placeholder_text="Password")
+    box.append(entry)
+    dialog.set_extra_child(box)
+
+    def on_response(dlg, response):
+        if response == "go":
+            pwd = entry.get_text()
+            if pwd and manager.validate_password(pwd):
+                manager.set_password(pwd)
+                on_success()
+            else:
+                err = Adw.MessageDialog(heading="Authentication Failed", body="Incorrect password.",
+                                         transient_for=parent_window)
+                err.add_response("ok", "OK")
+                err.present()
+        dlg.close()
+
+    dialog.connect("response", on_response)
+    entry.connect("activate", lambda *_: dialog.response("go"))
+    dialog.present()
+```
+
+Wzorzec użycia w handlerze przycisku:
+```python
+def on_install_clicked(self, button):
+    manager = get_sudo_manager()
+    if manager.user_password:
+        self._start_install()
+    else:
+        prompt_password(self.get_root(), "Enter your password to install X.", self._start_install)
+```
+
+### 5.3 Blokada interfejsu na czas operacji (opcjonalne, zalecane)
+
+Jeśli operacja uprzywilejowana trwa dłużej (instalacja pakietu), zablokuj interakcję z resztą okna, żeby użytkownik nie mógł jej przerwać w połowie:
+```python
+def set_ui_locked(window, content_widget, locked: bool):
+    content_widget.set_sensitive(not locked)   # reguła CSS widget:insensitive { opacity: 0.3 } z sekcji 2
+    if locked:
+        window._block_id = window.connect("close-request", lambda *_: True)
+    elif hasattr(window, "_block_id"):
+        window.disconnect(window._block_id)
+        del window._block_id
+```
+Wywołuj `set_ui_locked(win, content, True)` tuż przed `run_privileged(...)`/`start_privileged_session()` i `set_ui_locked(win, content, False)` w callbacku po zakończeniu (najlepiej przez `GLib.idle_add`, bo właściwa komenda leci w osobnym wątku).
+
+---
+
+## 6. Lokalizacja (opcjonalnie, jeśli program ma być wielojęzyczny)
+
+Prosty system bez kompilacji `.po`/`.mo` — jeden plik Pythona ze słownikiem na język:
+
+```python
+# locales/pl_PL/strings.py
+translations = {
+    "Authentication Required": "Wymagane uwierzytelnienie",
+    "Cancel": "Anuluj",
+    "Password": "Hasło",
 }
 ```
 
-Typografia i Elementy Natywne Adwaita:
-- Tytuły ustawiane są przeważnie przez Pango Markup, np.: `<span size="xx-large" weight="bold">Tytuł</span>`.
-- Często stosuje się standardowe klasy Adwaita: `.title-1`, `.heading`, `.body`, `.dim-label` (dla wyszarzonego tekstu).
-- Zastosowano również wbudowane klasy przycisków: `.suggested-action` (główny przycisk, najczęściej niebieski/akcentowany) i `.destructive-action` (przycisk anulowania/czerwony).
+```python
+# i18n/localizer.py
+import os, locale, importlib.util
+from pathlib import Path
 
-Wskaźniki ładowania i logi:
-- W instalatorze użyty jest `Gtk.Spinner` do kręcącej się ikony ładowania (np. 32x32) oraz `Gtk.ProgressBar` dla paska postępu.
-- Okno logów wbudowano używając `Gtk.Revealer` z animacją `SLIDE_DOWN`, ukryte pod przyciskiem ("View Installation Log").
-- Logi wyświetlane są w `Gtk.TextView` (z klasą CSS `.console`), wpisane w `Gtk.ScrolledWindow`. Bufor tekstu (`Gtk.TextBuffer`) definiuje tagi kolorystyczne (`Gtk.TextTag`) z określoną czcionką (`monospace`) oraz wagą. Kolory tagów: komendy na niebiesko (`#62a0ea` pogrubione), sukces na zielono (`#57e389`), błąd na czerwono (`#ff7b63`) oraz info na żółto (`#f6d32d`).
+class Localizer:
+    def __init__(self, locales_dir: str, fallback_lang="en_US"):
+        self.fallback_lang = fallback_lang
+        lang = locale.getlocale()[0] or os.environ.get("LANG", "")
+        self.lang = lang.split(".")[0] if lang else fallback_lang
+        self.tables = {}
+        for lang_dir in Path(locales_dir).iterdir():
+            f = lang_dir / "strings.py"
+            if lang_dir.is_dir() and f.exists():
+                spec = importlib.util.spec_from_file_location(f"strings_{lang_dir.name}", f)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                self.tables[lang_dir.name] = getattr(module, "translations", {})
 
-Ikony:
-- Mniejsze ikony systemowe pobierane są poprzez `Gtk.Image.new_from_icon_name("system-run-symbolic")`.
-- Duże, własne ikony ładuje się przez tekstury GDK do `Gtk.Picture` z zachowaniem `Gtk.ContentFit.CONTAIN` i obsługą zmniejszania (`set_can_shrink(True)`), wspierane przez awaryjne (fallback) ikony oparte o zwykłe Emodzi np. "🖥️" renderowane jako `Gtk.Label` wewnątrz `Gtk.Overlay`.
+    def tr(self, key: str) -> str:
+        for lang in (self.lang, self.fallback_lang):
+            if key in self.tables.get(lang, {}):
+                return self.tables[lang][key]
+        return key
+```
 
-Aby odtworzyć identycznie wyglądającą aplikację, należy dokładnie odtworzyć te warstwy (layouty typu Box, Stack z animacjami, Adw.Clamp dla szerokości) oraz wdrożyć pokazany wyżej Provider CSS wraz z kontrolerami myszy (EventControllerMotion).
+Żeby nie owijać `_()` wokół każdego stringa w dialogach budowanych po angielsku, przetłumacz dialog całościowo tuż przed `.present()`:
+```python
+from gi.repository import Gtk
+
+def _translate_widget_tree(widget, localizer):
+    if isinstance(widget, Gtk.Label):
+        widget.set_label(localizer.tr(widget.get_label()))
+    elif isinstance(widget, Gtk.Button) and widget.get_label():
+        widget.set_label(localizer.tr(widget.get_label()))
+    child = widget.get_first_child()
+    while child is not None:
+        _translate_widget_tree(child, localizer)
+        child = child.get_next_sibling()
+
+def translate_dialog(dialog, localizer: Localizer):
+    if dialog.get_heading():
+        dialog.set_heading(localizer.tr(dialog.get_heading()))
+    if dialog.get_body():
+        dialog.set_body(localizer.tr(dialog.get_body()))
+    extra = dialog.get_extra_child()
+    if extra is not None:
+        _translate_widget_tree(extra, localizer)
+```
+
+---
+
+## 7. Architektura host + widgety (opcjonalnie, tylko jeśli program ma ładować wtyczki)
+
+Pomiń tę sekcję, jeśli piszesz pojedynczy, samodzielny program. Użyj, jeśli chcesz aplikację-hosta, która dynamicznie ładuje moduły z katalogu.
+
+```python
+import re, importlib.util
+from pathlib import Path
+
+def scan_widget_metadata(py_file: Path):
+    """Czyta plik jako TEKST i wyciąga self.widgetname/self.widgeticon/
+    self.widget_id regexem — BEZ importowania modułu. Pozwala wypełnić
+    sidebar natychmiast, zanim jakikolwiek widget faktycznie się załaduje."""
+    source = py_file.read_text(encoding="utf-8", errors="ignore")
+    name_m = re.search(r'self\.widgetname\s*=\s*["\'](.+?)["\']', source)
+    if not name_m:
+        return None
+    icon_m = re.search(r'self\.widgeticon\s*=\s*["\'](.+?)["\']', source)
+    id_m = re.search(r'self\.widget_id\s*=\s*["\'](.+?)["\']', source)
+    name = name_m.group(1)
+    return {"name": name, "icon": icon_m.group(1) if icon_m else None,
+            "id": id_m.group(1) if id_m else name.lower().replace(" ", "_")}
+
+def load_widget_module(py_file: Path, module_name: str):
+    """Wołaj TYLKO raz, przy pierwszym realnym użyciu widgetu (leniwe
+    ładowanie) — nie przy skanowaniu katalogu."""
+    spec = importlib.util.spec_from_file_location(module_name, py_file)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+```
+Host wstrzykuje współdzielone obiekty do każdego załadowanego modułu przez `setattr(module, "sudo_manager", get_sudo_manager())` i `setattr(module, "translate_dialog", translate_dialog)` — widget zakłada, że te nazwy istnieją jako zmienne globalne, nadpisane w locie przez hosta.
+
+---
+
+## 8. Struktura projektu
+
+```
+myapp/
+├── main.py                    # Adw.Application + główne okno + apply_css()
+├── theme.py                   # string CSS z sekcji 2 + apply_css()
+├── widgets/
+│   ├── scale_bin.py            # sekcja 4.1
+│   ├── hover_breathe.py        # sekcja 4.3
+│   ├── compact_sidebar.py      # sekcja 4.5
+│   ├── stagger.py              # sekcja 4.4
+│   └── icons.py                # sekcja 3.2
+├── auth/
+│   └── sudo_manager.py         # sekcja 5
+├── i18n/                       # opcjonalnie, sekcja 6
+│   ├── localizer.py
+│   └── locales/{en_US,pl_PL}/strings.py
+└── plugins/                    # opcjonalnie, tylko host+widgety, sekcja 7
+    └── loader.py
+```
+
+## 9. Kolejność implementacji dla AI
+
+1. `main.py`: `Adw.Application` + puste okno + `apply_css()` z bazowym arkuszem z sekcji 2.
+2. Szkielet okna: `headerbar.flat`, ewentualnie `Adw.NavigationSplitView` jeśli program ma sidebar.
+3. Jeśli program różni układ w wąskim/szerokim oknie: `Adw.BreakpointBin` + `ScaleBin` + `play_exit_then_spring_enter`.
+4. Wstaw `load_icon()` wszędzie, gdzie pokazujesz jakąkolwiek ikonę.
+5. Jeśli jest element powitalny/logo: podłącz `HoverBreatheController`.
+6. Jeśli jest sidebar z trybem kompaktowym: `CompactSidebarAnimator`.
+7. Dla list pokazywanych/ukrywanych dynamicznie (tryb edycji itp.): `stagger_reveal`/`stagger_dismiss` + klasy CSS `.row-enter-prep/.row-enter/.row-exit`.
+8. Wszędzie, gdzie program potrzebuje roota: `SudoManager` + `prompt_password()` — **nigdy** gołego `subprocess` z sudo.
+9. Opcjonalnie: `Localizer` + `translate_dialog`, jeśli wielojęzyczność.
+10. Opcjonalnie: `plugins/loader.py`, jeśli host ma ładować zewnętrzne moduły zamiast być monolitem.
+
+## 10. Minimalny szkielet spinający wszystko razem
+
+```python
+import gi
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Gtk, Adw
+
+from theme import apply_css, BASE_CSS
+from widgets.icons import load_icon
+from widgets.hover_breathe import HoverBreatheController
+from auth.sudo_manager import get_sudo_manager
+from auth.dialogs import prompt_password
+
+
+class MainWindow(Adw.ApplicationWindow):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.set_default_size(900, 620)
+
+        header = Gtk.HeaderBar()
+        header.add_css_class("flat")
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        root.set_margin_top(24); root.set_margin_bottom(24)
+        root.set_margin_start(24); root.set_margin_end(24)
+
+        # Logo z animacją "oddechu"
+        logo_shell = Gtk.Overlay()
+        logo_shell.set_size_request(112, 112)
+        logo = load_icon("/usr/share/icons/hicolor/128x128/apps/myapp.png", size=88)
+        logo_shell.set_child(logo)
+        self._breathe = HoverBreatheController(logo_shell, logo)
+        root.append(logo_shell)
+
+        # Przycisk odpalający operację wymagającą roota
+        install_btn = Gtk.Button(label="Zainstaluj")
+        install_btn.add_css_class("suggested-action")
+        install_btn.add_css_class("pill-action")
+        install_btn.connect("clicked", self._on_install_clicked)
+        root.append(install_btn)
+
+        toolbar_view = Adw.ToolbarView()
+        toolbar_view.add_top_bar(header)
+        toolbar_view.set_content(root)
+        self.set_content(toolbar_view)
+
+    def _on_install_clicked(self, button):
+        manager = get_sudo_manager()
+        if manager.user_password:
+            self._run_privileged_task()
+        else:
+            prompt_password(self, "Podaj hasło, aby kontynuować.", self._run_privileged_task)
+
+    def _run_privileged_task(self):
+        manager = get_sudo_manager()
+        manager.run_privileged(["pacman", "-Sy", "--noconfirm", "przyklad-pakietu"])
+        manager.forget_password()
+
+
+class MyApp(Adw.Application):
+    def do_activate(self):
+        apply_css(BASE_CSS)
+        win = MainWindow(application=self)
+        win.present()
+
+
+if __name__ == "__main__":
+    MyApp(application_id="com.example.myapp").run()
+```
+
+## 11. Checklist odbioru — "gotowe, gdy…"
+
+- [ ] Żaden kolor UI nie jest wpisany na sztywno poza świadomym akcentem marki (jeśli w ogóle występuje).
+- [ ] Przełączenie systemu na ciemny motyw / zmiana koloru akcentu natychmiast zmienia wygląd programu, bez restartu.
+- [ ] Zmiana szerokości okna w okolicy zdefiniowanego breakpointu pokazuje wyjście+sprężyste wejście, a nie "skok".
+- [ ] Każda operacja root pokazuje `Adw.MessageDialog` + `Gtk.PasswordEntry`, waliduje hasło `sudo -S -v` PRZED uruchomieniem właściwej komendy, i czyści hasło z pamięci (`forget_password()`) zaraz po zakończeniu.
+- [ ] Żadna komenda uprzywilejowana nie dostaje hasła jako argumentu linii poleceń ani nie trafia na dysk.
+- [ ] Ikony ładują się poprawnie z plików SVG i PNG, z sensownym fallbackiem na ikonę symboliczną.
+- [ ] Żadna animacja nie używa `time.sleep`/pętli blokującej — wszystko przez `Adw.TimedAnimation`/`Adw.SpringAnimation`/CSS `transition` lub `add_tick_callback`.

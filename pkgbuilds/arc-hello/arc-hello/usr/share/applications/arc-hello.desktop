@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Arc Hello
+Comment=Aplikacja powitalna i instalator dla systemu ArcOS
+Exec=/usr/bin/arc-hello
+Icon=/usr/share/images/szczur.svg
+Terminal=false
+Type=Application
+Categories=System;Settings;GTK;
+StartupNotify=true
+X-GNOME-Autostart-enabled=true
