@@ -1,21 +1,14 @@
 pkgname=ogulniega
 pkgver=1.0.0
-pkgrel=1
-pkgdesc="Launcher aplikacji uruchamiany przez Flatpak"
+pkgrel=2
+pkgdesc="Ogulniega Minecraft Launcher"
 arch=('any')
 depends=('flatpak')
+install='ogulniega.install'
 source=('OgulniegaInstaller.flatpakref')
 sha256sums=('8fe40f340bdd08ccc288c3cae8e0b4029597a4392d76c293a6889ce95bf29777')
 
 package() {
+    # Ta komenda tylko kopiuje plik ref na dysk, żeby skrypt .install miał do niego dostęp
     install -Dm644 "${srcdir}/OgulniegaInstaller.flatpakref" "${pkgdir}/usr/share/flatpaks/OgulniegaInstaller.flatpakref"
-
-    install -dm755 "${pkgdir}/usr/bin"
-    cat << 'EOF' > "${pkgdir}/usr/bin/ogulniega"
-#!/bin/sh
-flatpak install --user --from /usr/share/flatpaks/OgulniegaInstaller.flatpakref -y
-APP_ID=$(grep -i '^Name=' /usr/share/flatpaks/OgulniegaInstaller.flatpakref | head -n1 | cut -d= -f2)
-exec flatpak run "$APP_ID" "$@"
-EOF
-    chmod +x "${pkgdir}/usr/bin/ogulniega"
 }

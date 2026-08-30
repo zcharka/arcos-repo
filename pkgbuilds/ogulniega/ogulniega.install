@@ -1,0 +1,13 @@
+post_install() {
+    echo "Pobieranie i instalowanie aplikacji z pliku .flatpakref..."
+    flatpak install --system -y --from /usr/share/flatpaks/launcher.flatpakref
+}
+
+post_upgrade() {
+    post_install
+}
+
+post_remove() {
+    echo "Uwaga: Usunięto paczkę z repozytorium, ale aplikacja Flatpak mogła pozostać w systemie."
+    echo "Aby ją usunąć, wpisz: flatpak uninstall i wpisz nazwę aplikacji."
+}
