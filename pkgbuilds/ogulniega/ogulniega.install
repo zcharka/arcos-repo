@@ -10,6 +10,6 @@ post_upgrade() {
 post_remove() {
     echo "Removing an flatpak app..."
 
-    flatpak uninstall --system -y ogulniega
+    flatpak uninstall --system -y com.ogulniega.launcher
 
 }
