@@ -1,5 +1,5 @@
 post_install() {
-    echo "Downloading and installing ogulniega flatpak..."
+    echo "Downloading and installing app from .flatpakref file..."
     flatpak install --system -y --from /usr/share/flatpaks/OgulniegaInstaller.flatpakref
 }
 
@@ -8,6 +8,8 @@ post_upgrade() {
 }
 
 post_remove() {
-    echo "Uwaga: Usunięto paczkę z repozytorium, ale aplikacja Flatpak mogła pozostać w systemie."
-    echo "Aby ją usunąć, wpisz: flatpak uninstall i wpisz nazwę aplikacji."
+    echo "Removing an flatpak app..."
+
+    flatpak uninstall --system -y ogulniega
+
 }
