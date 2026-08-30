@@ -1,6 +1,6 @@
 post_install() {
-    echo "Pobieranie i instalowanie aplikacji z pliku .flatpakref..."
-    flatpak install --system -y --from /usr/share/flatpaks/launcher.flatpakref
+    echo "Downloading and installing ogulniega flatpak..."
+    flatpak install --system -y --from /usr/share/flatpaks/OgulniegaInstaller.flatpakref
 }
 
 post_upgrade() {

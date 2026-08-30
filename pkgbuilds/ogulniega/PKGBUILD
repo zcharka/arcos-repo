@@ -1,6 +1,6 @@
 pkgname=ogulniega
 pkgver=1.0.0
-pkgrel=2
+pkgrel=3
 pkgdesc="Ogulniega Minecraft Launcher"
 arch=('any')
 depends=('flatpak')
