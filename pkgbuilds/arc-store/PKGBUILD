@@ -1,10 +1,8 @@
-# Maintainer: Petexy <https://github.com/Petexy>
-
 pkgname=arc-store
 pkgver=1.0.0
 pkgrel=1
 pkgdesc='Arc Store - a graphical package manager for pacman and the AUR'
-url='https://github.com/Petexy'
+url='https://github.com/zcharka'
 arch=('any')
 license=('GPL-3.0')
 depends=(
