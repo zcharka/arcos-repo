@@ -6,18 +6,17 @@
 
 **Arc Store** is a standalone graphical package manager for Arch Linux, built with Python, GTK4 and Libadwaita. It searches and manages both official repositories (`pacman`) and the AUR, with a review step for every AUR `PKGBUILD` before it's ever built.
 
-This app started life as a widget (`y-package_manager.py`) for [Linexin Center](https://github.com/Petexy/Linexin-Center) and has been converted here into its own self-contained `Adw.Application`, following the same look, animation, icon-loading and sudo/authentication rules Linexin Center itself uses.
+This app started life as a widget (`y-package_manager.py`) for [Linexin Center](https://github.com/Petexy/Linexin-Center) and has been converted here into its own self-contained `Adw.Application`, following the same look, animation, icon-loading and sudo/authentication rules Linexin Center itself uses. Packaged and maintained separately from Linexin Center by [zcharka](https://github.com/zcharka).
 
 ## 🌟 Key Features
 
-* **Search & manage packages:** live search across official repos and (optionally) the AUR, with install/remove from a single list.
+* **Search & manage packages:** live search across official repos, the local pacman database, and (optionally) the AUR, with install/remove from a single list. This also finds packages that were `makepkg -si`'d from a private or since-removed source — anything `pacman -Q` knows about, not just what's in a sync repo.
 * **AUR build review:** clones the AUR package's git repo and shows you the `PKGBUILD` before anything is compiled or installed.
 * **Package details:** icon, version, install status, and — when `webkitgtk-6.0` is installed — the relevant Arch Wiki page rendered right in the app.
 * **Version switching:** install an older version of an already-installed package from the repo, the pacman cache, or the Arch Linux Archive.
 * **Maintenance actions:** refresh repositories, clear the package cache, remove orphaned packages, and remove a stuck `db.lck` — all from one panel.
 * **Safe root access:** every privileged pacman/makepkg call goes through a single `SudoManager` that validates the password with `sudo -S -v` before running anything, feeds it to `sudo` through a private named pipe (never a command-line argument, never written to disk), and forgets it as soon as the operation finishes.
 * **Follows the system theme:** every color in the UI is a libadwaita alias (`@accent_color`, `@window_bg_color`, ...) — switching the system's theme or accent color updates Arc Store immediately, no restart needed.
-* **GNOME and Plasma/Hyprland aware:** picks client-side or server-side window decorations depending on the desktop it's running under.
 
 ## 🛠️ Dependencies
 
@@ -46,7 +45,7 @@ arc-store/
         │   └── arc-store                       # launcher, resolves and runs main.py
         └── share/
             ├── applications/
-            │   └── github.petexy.arcstore.desktop
+            │   └── github.zcharka.arcstore.desktop
             └── arc-store/                       # everything the app needs to run
                 ├── main.py                       # Adw.Application + main window
                 ├── theme.py                      # shared CSS (apply_css)
@@ -72,3 +71,15 @@ makepkg -si
 * Everything else — search, install/remove, AUR review, maintenance actions, adaptive layout — is unchanged from the original widget.
 
 Not pulled in from the UI spec: `ScaleBin`/breakpoint-spring transitions, `CompactSidebarAnimator`, and `stagger_reveal`/`stagger_dismiss` are shipped in `widgets/` ready to use, but weren't force-fitted into the existing (and already working) adaptive layout and virtualized results list — retrofitting them would have meant restructuring already-solid code for a cosmetic difference. `load_icon()` and `HoverBreatheController` *are* wired up, on the About window's logo.
+
+## 🐞 Fixed since the first cut
+
+* **Startup crash on every desktop:** `main.py` briefly tried to call `set_child()` on the `Adw.ApplicationWindow` for a Plasma/Hyprland-specific code path. Libadwaita doesn't support that at all — it's a hard `Adwaita-ERROR` abort, not a warning, and it fired regardless of desktop. Removed; `set_content()` is now used unconditionally, which is correct (and works fine) on GNOME, Plasma, Cinnamon, Hyprland, or anything else.
+* **NVIDIA + GTK4's Vulkan renderer:** `GSK_RENDERER=gl` is now set as a default (not forced — `setdefault`, so it never overrides a value you set yourself) in both the launcher and `main.py`, working around a documented NVIDIA-proprietary-driver crash in GTK4's newer default renderer.
+* Invalid CSS pseudo-class (`widget:insensitive`, not a real GTK4 selector) fixed to `widget:disabled`.
+* The WebKit view for the Arch Wiki panel is now built on first use instead of at startup, so the app doesn't spin up a full WebKit process before its window even exists.
+
+## 🔧 Other notes
+
+* Minimum window size is locked to Arc Store's normal working size (1099×728) — it can be made larger, not smaller.
+* App icon and GitHub links point at [zcharka](https://github.com/zcharka)'s own fork/packaging of this app, not the upstream Linexin Center project.

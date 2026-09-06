@@ -1,6 +1,8 @@
+# Maintainer: zcharka <https://github.com/zcharka>
+
 pkgname=arc-store
 pkgver=1.0.0
-pkgrel=1
+pkgrel=6
 pkgdesc='Arc Store - a graphical package manager for pacman and the AUR'
 url='https://github.com/zcharka'
 arch=('any')
