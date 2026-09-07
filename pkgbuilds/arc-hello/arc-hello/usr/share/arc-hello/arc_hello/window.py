@@ -5,18 +5,30 @@ gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, GLib
 from arc_hello.utils.autostart import is_autostart_enabled, set_autostart_enabled, ensure_autostart_default
 from arc_hello.utils.installer import ensure_installed
-from arc_hello.utils.system import get_szczur_logo_path
+from arc_hello.utils.system import (
+    get_szczur_logo_path,
+    install_package_with_fallback,
+    uninstall_package_with_fallback
+)
 from arc_hello.widgets.icons import load_icon
 
 from arc_hello.views.welcome_view import WelcomeView
+from arc_hello.views.app_details_view import AppDetailsView
+from arc_hello.views.changelog_view import ChangelogView
+from arc_hello.views.progress_view import ProgressView
 from arc_hello.views.x11_dialog import X11InstallerDialog
-from arc_hello.views.changelog_dialog import ChangelogDialog
+from arc_hello.views.settings_view import SettingsView
+from arc_hello.views.x11_manager_view import X11ManagerView
 
 class ArcHelloWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.set_title("Arc Hello")
         self.set_default_size(1080, 740)
+
+        # Set default window icon for taskbar / compositor
+        Gtk.Window.set_default_icon_name("org.arcos.ArcHello")
+        self.set_icon_name("org.arcos.ArcHello")
 
         # Ensure autostart is enabled automatically by default on startup
         ensure_autostart_default()
@@ -25,7 +37,6 @@ class ArcHelloWindow(Adw.ApplicationWindow):
         self.set_content(self.toast_overlay)
 
         self._build_ui()
-        self._setup_text_tags()
 
         # Trigger self-copy check deferred after window is presented
         GLib.idle_add(self._check_self_installation)
@@ -45,7 +56,7 @@ class ArcHelloWindow(Adw.ApplicationWindow):
     def _build_ui(self):
         toolbar_view = Adw.ToolbarView()
 
-        # Flat HeaderBar matching Linexin style
+        # Flat HeaderBar matching Linexin / Arc Store style
         header = Adw.HeaderBar()
         header.add_css_class("flat")
 
@@ -70,6 +81,12 @@ class ArcHelloWindow(Adw.ApplicationWindow):
 
         header.pack_end(autostart_box)
 
+        # Settings Button
+        btn_settings = Gtk.Button.new_from_icon_name("preferences-system-symbolic")
+        btn_settings.set_tooltip_text("Ustawienia")
+        btn_settings.connect("clicked", self._open_settings_view)
+        header.pack_start(btn_settings)
+
         # Info Button
         btn_info = Gtk.Button.new_from_icon_name("help-about-symbolic")
         btn_info.set_tooltip_text("O programie Arc Hello")
@@ -78,64 +95,67 @@ class ArcHelloWindow(Adw.ApplicationWindow):
 
         toolbar_view.add_top_bar(header)
 
-        # WelcomeView (Main 2-Column Dashboard Layout)
+        # Main Stack for Full-Page View Transitions (matching Arc Store)
+        self.main_stack = Gtk.Stack()
+        self.main_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+        self.main_stack.set_transition_duration(300)
+
+        # 1. Main Welcome Dashboard
         self.welcome_view = WelcomeView(
             parent_window=self,
             run_cmd_cb=self.log_output,
-            open_changelog_cb=self.open_changelog_dialog,
-            open_x11_cb=self.open_x11_dialog,
+            open_changelog_cb=self.open_changelog,
+            open_x11_cb=self._open_x11_manager_view,
+            show_toast_cb=self.show_toast,
+            open_app_details_cb=self.open_app_details,
+            start_install_cb=self.start_installation
+        )
+        self.main_stack.add_named(self.welcome_view, "main")
+
+        # 2. App Details View
+        self.app_details_view = AppDetailsView(
+            parent_window=self,
+            back_cb=self.go_back,
+            start_install_cb=self.start_installation,
+            start_uninstall_cb=self.start_uninstallation,
             show_toast_cb=self.show_toast
         )
-        self.welcome_view.set_vexpand(True)
-        self.welcome_view.set_hexpand(True)
+        self.main_stack.add_named(self.app_details_view, "app_details")
 
-        bottom_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        bottom_box.set_vexpand(True)
-        bottom_box.set_hexpand(True)
-        bottom_box.append(self.welcome_view)
+        # 3. Changelog View
+        self.changelog_view = ChangelogView(
+            parent_window=self,
+            back_cb=self.go_back
+        )
+        self.main_stack.add_named(self.changelog_view, "changelog")
 
-        # Bottom Console Revealer Bar
-        log_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        log_bar.set_margin_top(6)
-        log_bar.set_margin_bottom(6)
-        log_bar.set_margin_start(16)
-        log_bar.set_margin_end(16)
+        # 4. Progress View
+        self.progress_view = ProgressView(
+            parent_window=self,
+            back_cb=self.go_back
+        )
+        self.main_stack.add_named(self.progress_view, "progress")
 
-        self.spinner = Gtk.Spinner()
-        self.spinner.set_size_request(20, 20)
+        # 5. X11 Manager View
+        self.x11_manager_view = X11ManagerView(
+            parent_window=self,
+            back_cb=self.go_back,
+            start_install_cb=self._do_start_installation,
+            start_uninstall_cb=self.start_uninstallation
+        )
+        self.main_stack.add_named(self.x11_manager_view, "x11_manager")
 
-        self.progress_bar = Gtk.ProgressBar()
-        self.progress_bar.set_hexpand(True)
-        self.progress_bar.set_valign(Gtk.Align.CENTER)
+        # 6. Settings View
+        self.settings_view = SettingsView(
+            parent_window=self,
+            back_cb=self.go_back,
+            open_about_cb=lambda: self._show_about_dialog(None)
+        )
+        self.main_stack.add_named(self.settings_view, "settings")
 
-        self.btn_toggle_log = Gtk.Button(label="Konsola instalacji")
-        self.btn_toggle_log.add_css_class("linexin-card-action")
-        self.btn_toggle_log.connect("clicked", self._on_toggle_log_clicked)
+        self.main_stack.set_visible_child_name("main")
 
-        log_bar.append(self.spinner)
-        log_bar.append(self.progress_bar)
-        log_bar.append(self.btn_toggle_log)
-
-        self.revealer = Gtk.Revealer()
-        self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
-        self.revealer.set_transition_duration(250)
-
-        console_scroll = Gtk.ScrolledWindow()
-        console_scroll.set_size_request(-1, 160)
-
-        self.console_view = Gtk.TextView()
-        self.console_view.set_editable(False)
-        self.console_view.set_monospace(True)
-        self.console_view.add_css_class("console")
-        self.text_buffer = self.console_view.get_buffer()
-
-        console_scroll.set_child(self.console_view)
-        self.revealer.set_child(console_scroll)
-
-        bottom_box.append(log_bar)
-        bottom_box.append(self.revealer)
-
-        toolbar_view.set_content(bottom_box)
+        toolbar_view.set_content(self.main_stack)
         self.toast_overlay.set_child(toolbar_view)
 
     def _on_autostart_toggled(self, switch, state):
@@ -144,28 +164,77 @@ class ArcHelloWindow(Adw.ApplicationWindow):
         self.show_toast(msg)
         return False
 
-    def _on_toggle_log_clicked(self, button):
-        self.revealer.set_reveal_child(not self.revealer.get_reveal_child())
+    def open_app_details(self, app_info: dict):
+        self.app_details_view.load_app(app_info)
+        self.main_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT)
+        self.main_stack.set_visible_child_name("app_details")
 
-    def _setup_text_tags(self):
-        self.tag_cmd = self.text_buffer.create_tag("cmd", foreground="#62a0ea", weight=700)
-        self.tag_success = self.text_buffer.create_tag("success", foreground="#57e389", weight=700)
-        self.tag_error = self.text_buffer.create_tag("error", foreground="#ff7b63", weight=700)
-        self.tag_info = self.text_buffer.create_tag("info", foreground="#f6d32d")
+    def open_changelog(self):
+        self.main_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT)
+        self.main_stack.set_visible_child_name("changelog")
+
+    def go_back(self):
+        self.main_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_RIGHT)
+        self.main_stack.set_visible_child_name("main")
+
+    def _open_x11_manager_view(self):
+        self.x11_manager_view.refresh_state()
+        self.main_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT)
+        self.main_stack.set_visible_child_name("x11_manager")
+
+    def _open_settings_view(self, button=None):
+        self.settings_view.refresh_state()
+        self.main_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT)
+        self.main_stack.set_visible_child_name("settings")
+
+    def start_installation(self, pkg_name: str, app_name: str):
+        self._do_start_installation(pkg_name, app_name)
+
+    def _do_start_installation(self, pkg_name: str, app_name: str):
+        self.main_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT)
+        self.main_stack.set_visible_child_name("progress")
+        self.progress_view.start_install(app_name)
+
+        def _on_output(line, tag):
+            self.progress_view.log_output(line, tag)
+
+        def _on_finished(code):
+            self.progress_view.finish_install(code, app_name)
+            if code == 0:
+                self.show_toast(f"Pomyślnie zainstalowano {app_name}!")
+                # Odśwież stan X11 managera, jeśli to instalacja X11
+                if pkg_name == "x11":
+                    self.x11_manager_view.refresh_state()
+            elif code == -1:
+                self.show_toast("Anulowano instalację.")
+            else:
+                self.show_toast(f"Błąd podczas instalacji {app_name}.")
+
+        install_package_with_fallback(pkg_name, self, _on_output, _on_finished)
+
+    def start_uninstallation(self, pkg_name: str, app_name: str):
+        self.main_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT)
+        self.main_stack.set_visible_child_name("progress")
+        self.progress_view.start_install(f"odinstalowywanie {app_name}")
+
+        def _on_output(line, tag):
+            self.progress_view.log_output(line, tag)
+
+        def _on_finished(code):
+            self.progress_view.finish_install(code, app_name)
+            if code == 0:
+                self.show_toast(f"Pomyślnie odinstalowano {app_name}!")
+                if pkg_name == "x11":
+                    self.x11_manager_view.refresh_state()
+            elif code == -1:
+                self.show_toast("Anulowano odinstalowywanie.")
+            else:
+                self.show_toast(f"Błąd podczas odinstalowywania {app_name}.")
+
+        uninstall_package_with_fallback(pkg_name, self, _on_output, _on_finished)
 
     def log_output(self, text: str, tag_name: str = "info"):
-        self.revealer.set_reveal_child(True)
-        def _gui_update():
-            tag = getattr(self, f"tag_{tag_name}", None)
-            end_iter = self.text_buffer.get_end_iter()
-            if tag:
-                self.text_buffer.insert_with_tags(end_iter, text, tag)
-            else:
-                self.text_buffer.insert(end_iter, text)
-            mark = self.text_buffer.create_mark(None, self.text_buffer.get_end_iter(), False)
-            self.console_view.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
-
-        GLib.idle_add(_gui_update)
+        self.progress_view.log_output(text, tag_name)
 
     def open_x11_dialog(self):
         dialog = X11InstallerDialog(
@@ -173,10 +242,6 @@ class ArcHelloWindow(Adw.ApplicationWindow):
             run_cmd_cb=self.log_output,
             show_toast_cb=self.show_toast
         )
-        dialog.present()
-
-    def open_changelog_dialog(self):
-        dialog = ChangelogDialog(parent_window=self)
         dialog.present()
 
     def _show_about_dialog(self, button):

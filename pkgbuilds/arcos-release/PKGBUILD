@@ -1,11 +1,25 @@
 pkgname=arcos-release
 pkgver=1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="ArcOS system identification files"
 arch=('any')
 license=('GPL3')
 
 package() {
-    install -Dm644 "$startdir/root/etc/os-release" \
-        "$pkgdir/etc/os-release"
+    # Real file lives in /usr/lib, per the os-release(5) spec.
+    install -Dm644 "$startdir/root/usr/lib/os-release" \
+        "$pkgdir/usr/lib/os-release"
+
+    # /etc/os-release must be a *relative* symlink to it. On a stock system this
+    # symlink is normally created at runtime by systemd-tmpfiles (rule owned by
+    # the systemd package, not by any package's file list), which is why a
+    # plain `install -Dm644 ... "$pkgdir/etc/os-release"` here does not behave
+    # as expected: pacman finds /etc/os-release already exists as that symlink
+    # and writes through it into /usr/lib/os-release instead of replacing it,
+    # leaving /etc/os-release looking untouched. Owning the symlink ourselves
+    # avoids depending on tmpfiles timing (important for pacstrap/archiso
+    # builds, where tmpfiles hasn't run yet) and makes the package's contents
+    # unambiguous.
+    install -d "$pkgdir/etc"
+    ln -sf "../usr/lib/os-release" "$pkgdir/etc/os-release"
 }

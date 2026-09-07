@@ -34,6 +34,10 @@ widget:disabled { opacity: 0.35; }
 }
 .linexin-app-card {
     border-radius: 12px;
+    transition: background-color 200ms;
+}
+.linexin-app-card:hover {
+    background-color: alpha(currentColor, 0.05);
 }
 .linexin-new-badge {
     background-color: @accent_bg_color;

@@ -11,9 +11,12 @@ from arc_hello.window import ArcHelloWindow
 class ArcHelloApplication(Adw.Application):
     def __init__(self):
         super().__init__(
-            application_id="io.github.zcharka.ArcHello",
+            application_id="org.arcos.ArcHello",
             flags=0
         )
+        from gi.repository import GLib
+        GLib.set_prgname("org.arcos.ArcHello")
+        GLib.set_application_name("Arc Hello")
 
     def do_startup(self):
         Adw.Application.do_startup(self)

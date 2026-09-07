@@ -7,7 +7,7 @@ gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Pango
 from arc_hello.widgets.icons import load_icon
 from arc_hello.widgets.hover_breathe import HoverBreatheController
-from arc_hello.views.app_details_dialog import AppDetailsDialog
+
 from arc_hello.utils.system import (
     is_package_installed,
     install_package_with_fallback,
@@ -19,7 +19,7 @@ from arc_hello.utils.system import (
 
 QUICK_LINKS = [
     {
-        "label": "Strona ArcOS & Dokumentacja",
+        "label": "Strona ArcOS &amp; Dokumentacja",
         "description": "Dowiedz się więcej o systemie ArcOS",
         "icon": "help-browser-symbolic",
         "url": "https://zcharka.github.io/ArcOS/documentation",
@@ -47,43 +47,43 @@ QUICK_LINKS = [
 RECOMMENDED_APPS = [
     {
         "name": "Ogulniega",
-        "description": "Launcher dla klienta Ogulniega Client (Minecraft). Instalator z pliku .flatpakref.",
-        "icon": "applications-games-symbolic",
+        "description": "Launcher dla klienta Ogulniega Client (Minecraft).",
+        "icon": "/usr/share/arc-hello/arc_hello/icons/ogulniega.svg",
         "package": "ogulniega",
         "category": "Gry / Minecraft",
     },
     {
         "name": "Blockbench",
         "description": "Edytor modeli 3D i pikselartu dla Minecraft i gier 3D.",
-        "icon": "applications-games-symbolic",
+        "icon": "/usr/share/arc-hello/arc_hello/icons/blockbench.svg",
         "package": "blockbench",
         "category": "Grafika 3D",
     },
     {
         "name": "Blender",
         "description": "Zaawansowany pakiet do tworzenia grafiki i animacji 3D.",
-        "icon": "applications-graphics-symbolic",
+        "icon": "/usr/share/arc-hello/arc_hello/icons/blender.svg",
         "package": "blender",
         "category": "Grafika 3D",
     },
     {
         "name": "Opera Browser",
         "description": "Szybka i bezpieczna przeglądarka internetowa z VPN.",
-        "icon": "web-browser-symbolic",
+        "icon": "/usr/share/arc-hello/arc_hello/icons/opera.svg",
         "package": "opera",
         "category": "Internet",
     },
     {
         "name": "Sober",
         "description": "Środowisko uruchomieniowe do uruchamiania gier na Linuksie.",
-        "icon": "input-gaming-symbolic",
+        "icon": "/usr/share/arc-hello/arc_hello/icons/sober.svg",
         "package": "sober",
         "category": "Gry",
     },
 ]
 
 class WelcomeView(Gtk.Box):
-    def __init__(self, parent_window, run_cmd_cb, open_changelog_cb, open_x11_cb, show_toast_cb):
+    def __init__(self, parent_window, run_cmd_cb, open_changelog_cb, open_x11_cb, show_toast_cb, open_app_details_cb=None, start_install_cb=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.set_vexpand(True)
         self.set_hexpand(True)
@@ -93,6 +93,8 @@ class WelcomeView(Gtk.Box):
         self.open_changelog_cb = open_changelog_cb
         self.open_x11_cb = open_x11_cb
         self.show_toast_cb = show_toast_cb
+        self.open_app_details_cb = open_app_details_cb
+        self.start_install_cb = start_install_cb
 
         self._download_buttons = {}
         self._build_ui()
@@ -254,31 +256,31 @@ class WelcomeView(Gtk.Box):
         app_steam = {
             "name": "Steam & Gamemode",
             "description": "Ustawienia Big Picture oraz optymalizatory gamemode/gamescope",
-            "icon": "input-gaming-symbolic",
+            "icon": "/usr/share/arc-hello/arc_hello/icons/steam.svg",
             "package": "gamemode",
             "category": "Gry"
         }
         grid.append(self._create_app_card_with_details(app_steam))
 
-        # 2. vtrt-manager / virt-manager
-        app_vtrt = {
-            "name": "vtrt-manager",
+        # 2. virt-manager
+        app_virt = {
+            "name": "virt-manager",
             "description": "Menedżer wirtualizacji QEMU/KVM i libvirt",
-            "icon": "system-run-symbolic",
-            "package": "vtrt-manager",
+            "icon": "virt-manager",
+            "package": "virt-manager",
             "category": "Wirtualizacja"
         }
-        grid.append(self._create_app_card_with_details(app_vtrt))
+        grid.append(self._create_app_card_with_details(app_virt))
 
         # 3. Sesja X11
-        card_x11 = self._create_custom_card(
-            "Sesja X11",
-            "Instalator serwera wyświetlania X11 z instrukcją przełączania",
-            "video-display-symbolic",
-            action_label="Zainstaluj",
-            on_click=lambda btn: self.open_x11_cb()
-        )
-        grid.append(card_x11)
+        app_x11 = {
+            "name": "Sesja X11",
+            "description": "Instalator serwera wyświetlania X11 z instrukcją przełączania",
+            "icon": "video-display",
+            "package": "x11",
+            "category": "Serwer wyświetlania"
+        }
+        grid.append(self._create_x11_card(app_x11))
 
         return grid
 
@@ -400,43 +402,56 @@ class WelcomeView(Gtk.Box):
 
     def _create_app_card_with_details(self, app_info: dict, highlighted: bool = False) -> Gtk.Box:
         """
-        Creates an app card where clicking the card body opens Linpama-style App Details Dialog.
+        Creates an app card where clicking icon/text opens AppDetailsView and button installs.
         """
         pkg = app_info.get("package", app_info.get("name", ""))
         installed = is_package_installed(pkg)
 
-        card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        # Use a Box with a GestureClick instead of a Button to avoid nested button issues
+        # and grab-cancellation when the stack transitions and unmaps the card.
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         card.add_css_class("card")
         card.add_css_class("linexin-app-card")
-        card.add_css_class("activatable")
         card.set_size_request(-1, 72)
         card.set_tooltip_text(f"{app_info['name']}\n{app_info.get('description', '')}\nKliknij, aby zobaczyć szczegóły")
 
         if highlighted:
             card.add_css_class("linexin-new-card")
 
-        # Gesture click on card opens AppDetailsDialog
-        click_gesture = Gtk.GestureClick()
-        click_gesture.set_button(1)
-        click_gesture.connect("released", lambda g, n, x, y: self._open_app_details(app_info))
+        click_gesture = Gtk.GestureClick.new()
+        def _on_card_clicked(gesture, n_press, x, y):
+            self._open_app_details(app_info)
+        click_gesture.connect("pressed", _on_card_clicked)
         card.add_controller(click_gesture)
+
+        # card_box will hold the actual layout inside the card
+        card_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        card_box.set_vexpand(True)
+        card_box.set_valign(Gtk.Align.CENTER)
+
+        # details_box will hold the icon and text
+        details_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        details_box.set_margin_start(4)
+        details_box.set_margin_end(4)
+        details_box.set_hexpand(True)
+        details_box.set_can_target(False)
 
         icon_name = app_info.get("icon", "application-x-addon-symbolic")
         icon = load_icon(icon_name, size=36)
         icon.set_valign(Gtk.Align.CENTER)
-        icon.set_margin_start(10)
-        card.append(icon)
+        icon.set_can_target(False)
+        details_box.append(icon)
 
         text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         text_box.set_hexpand(True)
         text_box.set_valign(Gtk.Align.CENTER)
-        text_box.set_margin_top(10)
-        text_box.set_margin_bottom(10)
+        text_box.set_can_target(False)
 
         name_label = Gtk.Label(label=app_info["name"])
         name_label.set_halign(Gtk.Align.START)
         name_label.set_ellipsize(Pango.EllipsizeMode.END)
         name_label.add_css_class("heading")
+        name_label.set_can_target(False)
         text_box.append(name_label)
 
         desc_label = Gtk.Label(label=app_info.get("description", ""))
@@ -448,9 +463,11 @@ class WelcomeView(Gtk.Box):
         desc_label.set_lines(2)
         desc_label.set_wrap(True)
         desc_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        desc_label.set_can_target(False)
         text_box.append(desc_label)
 
-        card.append(text_box)
+        details_box.append(text_box)
+        card_box.append(details_box)
 
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         btn_box.set_valign(Gtk.Align.CENTER)
@@ -465,33 +482,97 @@ class WelcomeView(Gtk.Box):
             btn.set_label("Zainstaluj")
             btn.add_css_class("suggested-action")
             btn.add_css_class("linexin-card-action")
-            btn.connect("clicked", lambda b: self._install_pkg(pkg, b))
+            btn.connect("clicked", lambda b, p=pkg: self._install_pkg(p, b))
 
         btn_box.append(btn)
-        card.append(btn_box)
+        card_box.append(btn_box)
+        card.append(card_box)
 
         self._download_buttons[pkg] = btn
         return card
 
-    def _create_custom_card(self, name: str, description: str, icon_name: str,
-                            action_label: str = "Zainstaluj", on_click=None) -> Gtk.Box:
-        card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+    def _create_x11_card(self, app_info: dict) -> Gtk.Box:
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         card.add_css_class("card")
         card.add_css_class("linexin-app-card")
         card.set_size_request(-1, 72)
+        card.set_tooltip_text(f"{app_info['name']}\n{app_info.get('description', '')}\nKliknij, aby zarządzać")
+
+        click_gesture = Gtk.GestureClick.new()
+        def _on_card_clicked(gesture, n_press, x, y):
+            if self.open_x11_cb:
+                self.open_x11_cb()
+        click_gesture.connect("pressed", _on_card_clicked)
+        card.add_controller(click_gesture)
+
+        card_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        card_box.set_vexpand(True)
+        card_box.set_valign(Gtk.Align.CENTER)
+        card_box.set_halign(Gtk.Align.CENTER)
+
+        details_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        details_box.set_margin_start(4)
+        details_box.set_margin_end(4)
+        details_box.set_can_target(False)
+
+        icon_name = app_info.get("icon", "video-display")
+        icon = load_icon(icon_name, size=36)
+        icon.set_valign(Gtk.Align.CENTER)
+        icon.set_can_target(False)
+        details_box.append(icon)
+
+        text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        text_box.set_valign(Gtk.Align.CENTER)
+        text_box.set_can_target(False)
+
+        name_label = Gtk.Label(label=app_info["name"])
+        name_label.set_halign(Gtk.Align.START)
+        name_label.add_css_class("title-4")
+        name_label.set_can_target(False)
+        text_box.append(name_label)
+
+        if "description" in app_info:
+            desc_label = Gtk.Label(label=app_info["description"])
+            desc_label.set_halign(Gtk.Align.START)
+            desc_label.add_css_class("caption")
+            desc_label.add_css_class("dim-label")
+            desc_label.set_ellipsize(Pango.EllipsizeMode.END)
+            desc_label.set_max_width_chars(32)
+            desc_label.set_can_target(False)
+            text_box.append(desc_label)
+
+        details_box.append(text_box)
+        card_box.append(details_box)
+        
+        card.append(card_box)
+        return card
+
+    def _create_custom_card(self, name: str, description: str, icon_name: str,
+                            action_label: str = "Zainstaluj", on_click=None) -> Gtk.Box:
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        card.add_css_class("card")
+        card.add_css_class("linexin-app-card")
+        card.set_size_request(-1, 72)
+        
+        card_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        card_box.set_vexpand(True)
+        card_box.set_valign(Gtk.Align.CENTER)
 
         icon = load_icon(icon_name, size=36)
         icon.set_valign(Gtk.Align.CENTER)
         icon.set_margin_start(10)
-        card.append(icon)
+        icon.set_can_target(False)
+        card_box.append(icon)
 
         text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         text_box.set_hexpand(True)
         text_box.set_valign(Gtk.Align.CENTER)
+        text_box.set_can_target(False)
 
         name_label = Gtk.Label(label=name)
         name_label.set_halign(Gtk.Align.START)
         name_label.add_css_class("heading")
+        name_label.set_can_target(False)
         text_box.append(name_label)
 
         desc_label = Gtk.Label(label=description)
@@ -501,9 +582,10 @@ class WelcomeView(Gtk.Box):
         desc_label.set_ellipsize(Pango.EllipsizeMode.END)
         desc_label.set_max_width_chars(22)
         desc_label.set_lines(2)
+        desc_label.set_can_target(False)
         text_box.append(desc_label)
 
-        card.append(text_box)
+        card_box.append(text_box)
 
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         btn_box.set_valign(Gtk.Align.CENTER)
@@ -511,36 +593,41 @@ class WelcomeView(Gtk.Box):
 
         btn = Gtk.Button(label=action_label)
         btn.add_css_class("suggested-action")
-        btn.add_css_class("linexin-card-action")
+        btn.add_css_class("pill-action")
         if on_click:
-            btn.connect("clicked", on_click)
+            btn.connect("clicked", lambda b: on_click())
 
         btn_box.append(btn)
-        card.append(btn_box)
+        card_box.append(btn_box)
+        
+        card.append(card_box)
         return card
 
     def _open_app_details(self, app_info: dict):
-        dialog = AppDetailsDialog(
-            parent_window=self.parent_window,
-            app_info=app_info,
-            run_cmd_cb=self.run_cmd_cb,
-            show_toast_cb=self.show_toast_cb
-        )
-        dialog.present()
+        if self.open_app_details_cb:
+            self.open_app_details_cb(app_info)
 
     def _install_pkg(self, pkg_name: str, button: Gtk.Button):
-        button.set_sensitive(False)
-        button.set_label("Instalacja...")
+        app_name = pkg_name.capitalize()
+        for a in RECOMMENDED_APPS:
+            if a.get("package") == pkg_name:
+                app_name = a["name"]
+                break
+        if self.start_install_cb:
+            self.start_install_cb(pkg_name, app_name)
+        else:
+            button.set_sensitive(False)
+            button.set_label("Instalacja...")
 
-        def _on_output(line, tag):
-            self.run_cmd_cb(line, tag)
+            def _on_output(line, tag):
+                self.run_cmd_cb(line, tag)
 
-        def _on_finished(code):
-            if code == 0:
-                button.set_label("Zainstalowano")
-                button.remove_css_class("suggested-action")
-            else:
-                button.set_sensitive(True)
-                button.set_label("Zainstaluj")
+            def _on_finished(code):
+                if code == 0:
+                    button.set_label("Zainstalowano")
+                    button.remove_css_class("suggested-action")
+                else:
+                    button.set_sensitive(True)
+                    button.set_label("Zainstaluj")
 
-        install_package_with_fallback(pkg_name, self.parent_window, _on_output, _on_finished)
+            install_package_with_fallback(pkg_name, self.parent_window, _on_output, _on_finished)

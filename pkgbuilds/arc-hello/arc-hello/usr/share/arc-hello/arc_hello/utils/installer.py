@@ -5,7 +5,7 @@ from arc_hello.auth.dialogs import prompt_password
 
 INSTALL_BIN = "/usr/bin/arc-hello"
 INSTALL_SHARE = "/usr/share/arc-hello"
-DESKTOP_FILE = "/usr/share/applications/arc-hello.desktop"
+DESKTOP_FILE = "/usr/share/applications/org.arcos.ArcHello.desktop"
 
 def is_running_from_system() -> bool:
     current_script = os.path.abspath(sys.argv[0])
@@ -21,25 +21,33 @@ def install_system_files() -> bool:
         manager.run_privileged(["mkdir", "-p", "/usr/share/applications"])
         manager.run_privileged(["mkdir", "-p", "/usr/share/images"])
         manager.run_privileged(["mkdir", "-p", "/usr/share/programs"])
+        manager.run_privileged(["mkdir", "-p", "/usr/share/icons/hicolor/scalable/apps"])
+
+        manager.run_privileged(["mkdir", "-p", "/usr/share/pixmaps"])
 
         share_src = os.path.join(pkg_root, "share", "arc-hello")
         bin_src = os.path.join(pkg_root, "bin", "arc-hello")
-        desktop_src = os.path.join(pkg_root, "share", "applications", "arc-hello.desktop")
+        app_dir_src = os.path.join(pkg_root, "share", "applications")
         images_src = os.path.join(pkg_root, "share", "images")
         programs_src = os.path.join(pkg_root, "share", "programs")
+        icons_src = os.path.join(pkg_root, "share", "icons")
+        pixmaps_src = os.path.join(pkg_root, "share", "pixmaps")
 
         if os.path.exists(share_src):
             manager.run_privileged(["cp", "-rf", share_src + "/.", INSTALL_SHARE + "/"])
         if os.path.exists(bin_src):
             manager.run_privileged(["cp", "-f", bin_src, INSTALL_BIN])
             manager.run_privileged(["chmod", "+x", INSTALL_BIN])
-        if os.path.exists(desktop_src):
-            manager.run_privileged(["cp", "-f", desktop_src, DESKTOP_FILE])
-            manager.run_privileged(["chmod", "644", DESKTOP_FILE])
+        if os.path.exists(app_dir_src):
+            manager.run_privileged(["cp", "-rf", app_dir_src + "/.", "/usr/share/applications/"])
         if os.path.exists(images_src):
             manager.run_privileged(["cp", "-rf", images_src + "/.", "/usr/share/images/"])
         if os.path.exists(programs_src):
             manager.run_privileged(["cp", "-rf", programs_src + "/.", "/usr/share/programs/"])
+        if os.path.exists(icons_src):
+            manager.run_privileged(["cp", "-rf", icons_src + "/.", "/usr/share/icons/"])
+        if os.path.exists(pixmaps_src):
+            manager.run_privileged(["cp", "-rf", pixmaps_src + "/.", "/usr/share/pixmaps/"])
 
         return True
     except Exception as e:

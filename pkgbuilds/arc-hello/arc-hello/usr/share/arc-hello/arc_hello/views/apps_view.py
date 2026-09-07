@@ -41,7 +41,7 @@ GENERAL_APPS = [
 ]
 
 class AppsView(Gtk.Box):
-    def __init__(self, parent_window, run_cmd_cb):
+    def __init__(self, parent_window, run_cmd_cb, start_install_cb=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=20)
         self.set_margin_top(24)
         self.set_margin_bottom(24)
@@ -50,6 +50,7 @@ class AppsView(Gtk.Box):
 
         self.parent_window = parent_window
         self.run_cmd_cb = run_cmd_cb
+        self.start_install_cb = start_install_cb
         self._build_ui()
 
     def _build_ui(self):
@@ -113,7 +114,7 @@ class AppsView(Gtk.Box):
             btn.set_label("Zainstaluj")
             btn.add_css_class("suggested-action")
             btn.add_css_class("pill-action")
-            btn.connect("clicked", lambda _: self._install_app(app_info["pkg"], btn))
+            btn.connect("clicked", lambda _: self._install_app(app_info["pkg"], app_info["name"], btn))
 
         card.append(icon)
         card.append(vbox)
@@ -161,32 +162,24 @@ class AppsView(Gtk.Box):
             import subprocess
             subprocess.Popen([binary])
         else:
-            btn.set_sensitive(False)
-            btn.set_label("Instalowanie...")
+            self._install_app("arc-store", "Arc Store", btn)
+
+    def _install_app(self, pkg_name: str, app_name: str, button: Gtk.Button):
+        if self.start_install_cb:
+            self.start_install_cb(pkg_name, app_name)
+        else:
+            button.set_sensitive(False)
+            button.set_label("Instalacja...")
+
             def _on_output(line, tag):
                 self.run_cmd_cb(line, tag)
+
             def _on_finished(code):
-                btn.set_sensitive(True)
                 if code == 0:
-                    btn.set_label("Uruchom Arc Store")
+                    button.set_label("Zainstalowano")
+                    button.remove_css_class("suggested-action")
                 else:
-                    btn.set_label("Zainstaluj Arc Store")
+                    button.set_sensitive(True)
+                    button.set_label("Zainstaluj")
 
-            install_package_with_fallback("arc-store", self.parent_window, _on_output, _on_finished)
-
-    def _install_app(self, pkg_name: str, button: Gtk.Button):
-        button.set_sensitive(False)
-        button.set_label("Instalacja...")
-
-        def _on_output(line, tag):
-            self.run_cmd_cb(line, tag)
-
-        def _on_finished(code):
-            if code == 0:
-                button.set_label("Zainstalowano")
-                button.remove_css_class("suggested-action")
-            else:
-                button.set_sensitive(True)
-                button.set_label("Zainstaluj")
-
-        install_package_with_fallback(pkg_name, self.parent_window, _on_output, _on_finished)
+            install_package_with_fallback(pkg_name, self.parent_window, _on_output, _on_finished)

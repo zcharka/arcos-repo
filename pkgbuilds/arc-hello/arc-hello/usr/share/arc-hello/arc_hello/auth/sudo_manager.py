@@ -135,6 +135,20 @@ class SudoManager:
         t = threading.Thread(target=_thread, daemon=True)
         t.start()
 
+    def start_privileged_session(self):
+        """Open the gate for feeds — wrap a block of code that
+        itself launches several root subprocesses or sudo-authenticated helpers."""
+        if not self.user_password:
+            return
+        with self._feed_condition:
+            self._feeds_allowed = 1000
+            self._feed_condition.notify_all()
+
+    def stop_privileged_session(self):
+        with self._feed_condition:
+            self._feeds_allowed = 0
+        self._drain_pipe()
+
     def forget_password(self):
         self.user_password = None
         subprocess.run(["sudo", "-k"], check=False)

@@ -1,9 +1,9 @@
 # Maintainer: Petexy <https://github.com/Petexy>
 
-pkgname=linexin-center
+pkgname=arc-center
 pkgver=3.0.0.r
 pkgrel=3
-pkgdesc='Linexin Center'
+pkgdesc='Arc Center'
 url='https://github.com/Petexy'
 arch=('x86_64')
 license=('GPL-3.0')

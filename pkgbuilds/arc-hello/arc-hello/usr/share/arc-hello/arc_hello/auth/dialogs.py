@@ -4,7 +4,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Gtk, Adw
 from arc_hello.auth.sudo_manager import get_sudo_manager
 
-def prompt_password(parent_window, message: str, on_success, primary_label="Uwierzytelnij"):
+def prompt_password(parent_window, message: str, on_success, primary_label="Uwierzytelnij", on_cancel=None):
     manager = get_sudo_manager()
 
     dialog = Adw.MessageDialog(
@@ -29,6 +29,8 @@ def prompt_password(parent_window, message: str, on_success, primary_label="Uwie
                 manager.set_password(pwd)
                 on_success()
             else:
+                if on_cancel:
+                    on_cancel()
                 err = Adw.MessageDialog(
                     heading="Błąd Uwierzytelniania",
                     body="Wprowadzono niepoprawne hasło.",
@@ -36,6 +38,9 @@ def prompt_password(parent_window, message: str, on_success, primary_label="Uwie
                 )
                 err.add_response("ok", "OK")
                 err.present()
+        else:
+            if on_cancel:
+                on_cancel()
         dlg.close()
 
     dialog.connect("response", on_response)

@@ -2,7 +2,7 @@
 
 pkgname=arc-store
 pkgver=1.0.0
-pkgrel=7
+pkgrel=9
 pkgdesc='Arc Store - a graphical package manager for pacman and the AUR'
 url='https://github.com/zcharka'
 arch=('any')
@@ -16,7 +16,7 @@ depends=(
   'hicolor-icon-theme'
 )
 optdepends=(
-  'flatpak: install Flatpak apps alongside system packages'
+  'flatpak: search, install, and remove Flatpak apps from both tabs'
   'paru: faster/automated AUR builds (falls back to makepkg otherwise)'
   'webkitgtk-6.0: show live Arch Wiki pages inside the package detail view'
 )

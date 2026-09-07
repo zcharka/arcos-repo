@@ -84,18 +84,21 @@ class VtrtView(Gtk.Box):
         self.append(clamp)
 
     def _on_install_clicked(self, button):
-        button.set_sensitive(False)
-        button.set_label("Instalowanie pakietów...")
+        if hasattr(self.parent_window, "start_installation"):
+            self.parent_window.start_installation("vtrt-manager", "vtrt-manager (virt-manager)")
+        else:
+            button.set_sensitive(False)
+            button.set_label("Instalowanie pakietów...")
 
-        def _on_output(line, tag):
-            self.run_cmd_cb(line, tag)
+            def _on_output(line, tag):
+                self.run_cmd_cb(line, tag)
 
-        def _on_finished(code):
-            button.set_sensitive(True)
-            if code == 0:
-                button.set_label("vtrt-manager Gotowy")
-                button.remove_css_class("suggested-action")
-            else:
-                button.set_label("Spróbuj ponownie")
+            def _on_finished(code):
+                button.set_sensitive(True)
+                if code == 0:
+                    button.set_label("vtrt-manager Gotowy")
+                    button.remove_css_class("suggested-action")
+                else:
+                    button.set_label("Spróbuj ponownie")
 
-        install_package_with_fallback("vtrt-manager", self.parent_window, _on_output, _on_finished)
+            install_package_with_fallback("vtrt-manager", self.parent_window, _on_output, _on_finished)

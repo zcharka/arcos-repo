@@ -129,18 +129,4 @@ class X11InstallerDialog(Adw.Window):
 
     def _on_confirm_install(self, button):
         self.close()
-        pkgs = get_x11_installation_packages()
-        cmd = ["pacman", "-S", "--needed", "--noconfirm"] + pkgs
-
-        manager = get_sudo_manager()
-
-        def _on_out(line, tag):
-            self.run_cmd_cb(line, tag)
-
-        def _on_fin(code):
-            if code == 0:
-                self.show_toast_cb("Instalacja X11 zakończona! Wyloguj się, aby wybrać sesję X11.")
-            else:
-                self.show_toast_cb("Instalacja X11 zakończyła się niepowodzeniem.")
-
-        manager.run_privileged_async(cmd, _on_out, _on_fin)
+        self.parent_window._do_start_installation("x11", f"Sesję X11 ({self.de_info['de']})")
