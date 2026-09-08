@@ -1,9 +1,11 @@
 pkgname=arcos-release
 pkgver=1.0
-pkgrel=2
+pkgrel=4
 pkgdesc="ArcOS system identification files"
 arch=('any')
 license=('GPL3')
+depends=('hicolor-icon-theme')
+optdepends=('librsvg: render the ArcOS logo (SVG) in GTK apps')
 
 package() {
     # Real file lives in /usr/lib, per the os-release(5) spec.
@@ -22,4 +24,10 @@ package() {
     # unambiguous.
     install -d "$pkgdir/etc"
     ln -sf "../usr/lib/os-release" "$pkgdir/etc/os-release"
+
+    # Logo referenced by LOGO=arcos-logo in os-release. Lives in the hicolor
+    # fallback theme so Gtk.IconTheme lookups (arc-center's system-info widget,
+    # GNOME Settings-style "About" pages, etc.) find it by name alone.
+    install -Dm644 "$startdir/root/usr/share/icons/hicolor/scalable/apps/arcos-logo.svg" \
+        "$pkgdir/usr/share/icons/hicolor/scalable/apps/arcos-logo.svg"
 }
