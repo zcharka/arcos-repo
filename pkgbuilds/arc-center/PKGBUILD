@@ -1,8 +1,8 @@
 # Maintainer: Petexy <https://github.com/Petexy>
 
 pkgname=arc-center
-pkgver=3.0.0.r
-pkgrel=3
+pkgver=1.0
+pkgrel=5
 pkgdesc='Arc Center'
 url='https://github.com/Petexy'
 arch=('x86_64')
