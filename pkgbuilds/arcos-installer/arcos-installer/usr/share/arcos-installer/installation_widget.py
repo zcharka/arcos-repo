@@ -1070,6 +1070,21 @@ class InstallationWidget(Gtk.Box):
         # Remove temporary sudoers rule
         rm -f /etc/sudoers.d/99-yay-temp
 
+        # ── Manual GNOME extensions (not in AUR) ──────────────────────────
+        echo "Installing manual GNOME extensions (accent-directories)..."
+        EXT_UUID="accent-directories@taiwbi.com"
+        EXT_PK=$(python3 -c "import urllib.request, json; r = urllib.request.urlopen('https://extensions.gnome.org/extension-info/?uuid=$EXT_UUID'); d = json.loads(r.read()); pk = d['shell_version_map'][max(d['shell_version_map'].keys(), key=int)]['pk']; print(pk)" 2>/dev/null || true)
+        
+        if [ -n "$EXT_PK" ]; then
+            echo "Found $EXT_UUID with PK $EXT_PK, downloading and extracting..."
+            EXT_DIR="/home/$USERNAME/.local/share/gnome-shell/extensions/$EXT_UUID"
+            sudo -u "$USERNAME" mkdir -p "$EXT_DIR"
+            curl -sL "https://extensions.gnome.org/download-extension/$EXT_UUID.shell-extension.zip?version_tag=$EXT_PK" | sudo -u "$USERNAME" bsdtar -xf- -C "$EXT_DIR"
+            echo "✓ $EXT_UUID installed"
+        else
+            echo "Warning: Could not fetch metadata for $EXT_UUID, skipping."
+        fi
+
         echo "✓ GNOME extensions installed"
         """
 
