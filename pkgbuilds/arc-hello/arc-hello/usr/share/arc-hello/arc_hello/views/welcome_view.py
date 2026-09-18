@@ -83,7 +83,7 @@ RECOMMENDED_APPS = [
 ]
 
 class WelcomeView(Gtk.Box):
-    def __init__(self, parent_window, run_cmd_cb, open_changelog_cb, open_x11_cb, show_toast_cb, open_app_details_cb=None, start_install_cb=None):
+    def __init__(self, parent_window, run_cmd_cb, open_changelog_cb, open_x11_cb, show_toast_cb, open_app_details_cb=None, start_install_cb=None, open_settings_cb=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.set_vexpand(True)
         self.set_hexpand(True)
@@ -95,6 +95,7 @@ class WelcomeView(Gtk.Box):
         self.show_toast_cb = show_toast_cb
         self.open_app_details_cb = open_app_details_cb
         self.start_install_cb = start_install_cb
+        self.open_settings_cb = open_settings_cb
 
         self._download_buttons = {}
         self._build_ui()
@@ -397,6 +398,14 @@ class WelcomeView(Gtk.Box):
         row_cl.connect("activated", lambda *_: self.open_changelog_cb())
         listbox.append(row_cl)
 
+        if self.open_settings_cb:
+            row_settings = Adw.ActionRow(title="Ustawienia", subtitle="Informacje o systemie i tryb działania Arc Hello")
+            row_settings.set_activatable(True)
+            row_settings.add_prefix(load_icon("preferences-system-symbolic", size=20))
+            row_settings.add_suffix(load_icon("go-next-symbolic", size=16))
+            row_settings.connect("activated", lambda *_: self.open_settings_cb())
+            listbox.append(row_settings)
+
         box.append(listbox)
         return box
 
@@ -543,7 +552,7 @@ class WelcomeView(Gtk.Box):
 
         details_box.append(text_box)
         card_box.append(details_box)
-        
+
         card.append(card_box)
         return card
 
@@ -553,7 +562,7 @@ class WelcomeView(Gtk.Box):
         card.add_css_class("card")
         card.add_css_class("linexin-app-card")
         card.set_size_request(-1, 72)
-        
+
         card_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         card_box.set_vexpand(True)
         card_box.set_valign(Gtk.Align.CENTER)
@@ -599,7 +608,7 @@ class WelcomeView(Gtk.Box):
 
         btn_box.append(btn)
         card_box.append(btn_box)
-        
+
         card.append(card_box)
         return card
 

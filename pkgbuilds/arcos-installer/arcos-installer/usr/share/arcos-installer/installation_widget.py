@@ -999,6 +999,80 @@ class InstallationWidget(Gtk.Box):
         fi
         """
 
+    def _get_gnome_extensions_command(self):
+        """Generate a bash command (run inside arch-chroot) that installs
+        GNOME Shell extensions via yay (AUR helper) when GNOME is the
+        selected DE. Runs yay as the first non-root user found in /home
+        since yay refuses to run as root.
+
+        Official repo packages are installed with pacman first,
+        AUR packages are installed with yay afterwards.
+        """
+        return r"""
+        exec > /var/log/gnome_extensions_install.log 2>&1
+        set -x
+
+        SELECTION_FILE="/de_selection_key"
+
+        if [ ! -f "$SELECTION_FILE" ]; then
+            echo "No de_selection_key file, skipping GNOME extensions"
+            exit 0
+        fi
+
+        SELECTION="$(cat "$SELECTION_FILE" | tr -d '[:space:]')"
+
+        if [ "$SELECTION" != "gnome" ]; then
+            echo "DE is '$SELECTION', not gnome — skipping GNOME extensions"
+            exit 0
+        fi
+
+        echo "GNOME selected, installing extensions..."
+
+        # Find the first real user (UID >= 1000)
+        USERNAME=""
+        for dir in /home/*/; do
+            u="$(basename "$dir")"
+            uid="$(id -u "$u" 2>/dev/null || echo 0)"
+            if [ "$uid" -ge 1000 ]; then
+                USERNAME="$u"
+                break
+            fi
+        done
+
+        if [ -z "$USERNAME" ]; then
+            echo "ERROR: No regular user found in /home, cannot run yay"
+            exit 1
+        fi
+        echo "Using user: $USERNAME"
+
+        # ── Official repo extensions (pacman) ────────────────────────────
+        PACMAN_PKGS="gnome-shell-extension-appindicator gnome-shell-extensions"
+        echo "Installing official repo extensions: $PACMAN_PKGS"
+        pacman -S --needed --noconfirm $PACMAN_PKGS 2>/dev/null || true
+
+        # ── AUR extensions (yay) ─────────────────────────────────────────
+        AUR_PKGS="gnome-shell-extension-blur-my-shell gnome-shell-extension-dash-to-dock gnome-shell-extension-gsconnect gnome-shell-extension-rounded-window-corners-reborn gnome-shell-extension-quick-settings-audio-panel gnome-shell-extension-gtk4-desktop-icons-ng"
+
+        echo "Installing AUR extensions: $AUR_PKGS"
+
+        # Temporarily allow the user to run pacman without password for yay
+        echo "$USERNAME ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/99-yay-temp
+        chmod 440 /etc/sudoers.d/99-yay-temp
+
+        # yay needs a writable cache and config dir
+        sudo -u "$USERNAME" mkdir -p "/home/$USERNAME/.cache/yay"
+
+        for pkg in $AUR_PKGS; do
+            echo "Installing AUR package: $pkg"
+            sudo -u "$USERNAME" yay -S --noconfirm --needed --answerdiff=None --answerclean=None "$pkg" 2>/dev/null || echo "Warning: failed to install $pkg"
+        done
+
+        # Remove temporary sudoers rule
+        rm -f /etc/sudoers.d/99-yay-temp
+
+        echo "✓ GNOME extensions installed"
+        """
+
     def _get_bigpicture_autostart_command(self):
         """Generate a bash command (run inside arch-chroot, after DE packages
         and the user are set up) that wires up the "Tryb Big Picture" toggle
@@ -1369,6 +1443,14 @@ DESKTOP
             label="Installing desktop environment packages",
             command=["sudo", "arch-chroot", "/tmp/arcos_installer/root", "bash", "-c", self._get_install_de_packages_command()],
             description="Installing the packages for the desktop environment selected in the installer",
+            weight=5.0,
+            critical=False
+        ))
+
+        steps.append(InstallationStep(
+            label="Installing GNOME extensions",
+            command=["sudo", "arch-chroot", "/tmp/arcos_installer/root", "bash", "-c", self._get_gnome_extensions_command()],
+            description="Installing GNOME Shell extensions (only when GNOME is the selected DE)",
             weight=5.0,
             critical=False
         ))
