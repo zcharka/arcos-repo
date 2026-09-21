@@ -1,0 +1,52 @@
+%FILENAME%
+arcos-manager-1.0.0-9-x86_64.pkg.tar.zst
+
+%NAME%
+arcos-manager
+
+%BASE%
+arcos-manager
+
+%VERSION%
+1.0.0-9
+
+%DESC%
+ArcOS Package Manager and ISO Builder
+
+%CSIZE%
+63288
+
+%ISIZE%
+172342
+
+%SHA256SUM%
+a02c59e19c13c95021727162c478806990e4ba42956ed1de85fb86d902e7f96f
+
+%URL%
+https://github.com/zcharka
+
+%LICENSE%
+GPL-3.0
+
+%ARCH%
+x86_64
+
+%BUILDDATE%
+1785339191
+
+%PACKAGER%
+Unknown Packager
+
+%DEPENDS%
+python-gobject
+python-cairo
+gtk4
+libadwaita
+python
+pacman
+git
+
+%OPTDEPENDS%
+archiso: ISO building support
+polkit: Privileged operations
+

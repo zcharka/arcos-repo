@@ -1,0 +1,42 @@
+%FILENAME%
+arcos-release-1.0-4-any.pkg.tar.zst
+
+%NAME%
+arcos-release
+
+%BASE%
+arcos-release
+
+%VERSION%
+1.0-4
+
+%DESC%
+ArcOS system identification files
+
+%CSIZE%
+61301
+
+%ISIZE%
+59294
+
+%SHA256SUM%
+24de9296c2af0f11f6fcc0f8fc6796dfd7c6ea4b18626d6a42f081046447178f
+
+%LICENSE%
+GPL3
+
+%ARCH%
+any
+
+%BUILDDATE%
+1788903544
+
+%PACKAGER%
+Unknown Packager
+
+%DEPENDS%
+hicolor-icon-theme
+
+%OPTDEPENDS%
+librsvg: render the ArcOS logo (SVG) in GTK apps
+

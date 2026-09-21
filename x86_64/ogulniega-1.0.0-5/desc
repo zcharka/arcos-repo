@@ -1,0 +1,36 @@
+%FILENAME%
+ogulniega-1.0.0-5-any.pkg.tar.zst
+
+%NAME%
+ogulniega
+
+%BASE%
+ogulniega
+
+%VERSION%
+1.0.0-5
+
+%DESC%
+Ogulniega Minecraft Launcher
+
+%CSIZE%
+13948
+
+%ISIZE%
+844
+
+%SHA256SUM%
+017c7bbead60533ab569ce399bbd82040b011b0d56c2df7e7ca39a6f0b5c0d92
+
+%ARCH%
+any
+
+%BUILDDATE%
+1788052070
+
+%PACKAGER%
+Unknown Packager
+
+%DEPENDS%
+flatpak
+

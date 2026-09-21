@@ -1,0 +1,52 @@
+%FILENAME%
+arc-store-1.0.0-11-any.pkg.tar.zst
+
+%NAME%
+arc-store
+
+%BASE%
+arc-store
+
+%VERSION%
+1.0.0-11
+
+%DESC%
+Arc Store - a graphical package manager for pacman and the AUR
+
+%CSIZE%
+702027
+
+%ISIZE%
+802585
+
+%SHA256SUM%
+1e09ac44fde91c2371618b5129623385473b54a54c27ad938ebfcc6f52c042eb
+
+%URL%
+https://github.com/zcharka
+
+%LICENSE%
+GPL-3.0
+
+%ARCH%
+any
+
+%BUILDDATE%
+1788902762
+
+%PACKAGER%
+Unknown Packager
+
+%DEPENDS%
+python-gobject
+gtk4
+libadwaita
+python
+desktop-file-utils
+hicolor-icon-theme
+
+%OPTDEPENDS%
+flatpak: search, install, and remove Flatpak apps from both tabs
+paru: faster/automated AUR builds (falls back to makepkg otherwise)
+webkitgtk-6.0: show live Arch Wiki pages inside the package detail view
+
