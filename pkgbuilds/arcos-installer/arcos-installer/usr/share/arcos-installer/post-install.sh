@@ -341,12 +341,13 @@ if check_internet; then
         # Update GNOME extensions only if ArcOS (GNOME-based) is selected
         DE_VAL=$(cat "$DE_SELECTION_FILE" 2>/dev/null | tr -d '[:space:]')
         if [[ "$DE_VAL" == "0" ]]; then
-            print_msg "Installing gnome-extensions-cli..."
-            pacman -S gnome-extensions-cli --noconfirm 2>/dev/null
+            print_msg "Installing gnome-extensions-cli and extension-manager..."
+            pacman -S gnome-extensions-cli extension-manager --noconfirm 2>/dev/null
             if command -v gext &>/dev/null; then
                 CREATED_USER=$(ls /home/ | head -n 1)
                 if [[ -n "$CREATED_USER" ]]; then
-                    print_msg "Updating GNOME extensions for user $CREATED_USER..."
+                    print_msg "Installing and updating GNOME extensions for user $CREATED_USER..."
+                    sudo -u "$CREATED_USER" HOME="/home/$CREATED_USER" XDG_DATA_HOME="/home/$CREATED_USER/.local/share" gext install blur-my-shell@aunetx accent-directories@taiwbi.com gtk4-ding@smedius.gitlab.com dash-to-dock@micxgx.gmail.com gsconnect@andyholmes.github.io appindicatorsupport@rgcjonas.gmail.com rounded-window-corners@fxgn quick-settings-audio-panel@rayzeq.github.io user-theme@gnome-shell-extensions.gcampax.github.com -y 2>/dev/null || true
                     sudo -u "$CREATED_USER" HOME="/home/$CREATED_USER" XDG_DATA_HOME="/home/$CREATED_USER/.local/share" gext --filesystem update -y 2>/dev/null || true
                 else
                     print_warning "No user found in /home/, skipping GNOME extension update"

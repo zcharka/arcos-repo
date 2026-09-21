@@ -397,27 +397,6 @@ class DEPicker(Gtk.Box):
         self.internet_notices = getattr(self, "internet_notices", {})
         self.internet_notices[index] = (notice_box, option.get("requires_internet", False))
 
-        # "Tryb Big Picture" switch - hidden when bigpicture_capable is False (e.g. "none")
-        if option.get("bigpicture_capable"):
-            switch_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-            switch_row.set_halign(Gtk.Align.CENTER)
-            switch_row.set_margin_top(14)
-
-            switch_label = Gtk.Label(label="Tryb Big Picture")
-            switch_row.append(switch_label)
-
-            switch = Gtk.Switch()
-            switch.set_active(self.bigpicture_enabled.get(index, False))
-            switch.set_valign(Gtk.Align.CENTER)
-            switch.connect("state-set", self.on_bigpicture_switch_toggled, index)
-            switch_row.append(switch)
-            self.bigpicture_switches[index] = switch
-
-            switch_row.set_tooltip_text(
-                "Steam odpali się automatycznie w trybie Big Picture zaraz po starcie tego środowiska."
-            )
-            page.append(switch_row)
-
         return page
 
     def on_bigpicture_switch_toggled(self, switch, state, index):
