@@ -935,8 +935,9 @@ class InstallationWidget(Gtk.Box):
                 REMOVE_PKGS="$PLASMA_PKGS $GNOME_PKGS $CINNAMON_PKGS"
                 ENABLE_DM="sddm.service"
                 KEEP_SESSION_PATTERN="hyprland"
-                echo "Installing caelestia-shell via caelestia-cli..."
-                yes | caelestia install || echo "Warning: caelestia install failed"
+                TARGET_USER="$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 {print $1; exit}')"
+                echo "Installing caelestia-shell via caelestia-cli for $TARGET_USER..."
+                su - "$TARGET_USER" -c "yes | caelestia install --noconfirm" || echo "Warning: caelestia install failed"
                 ;;
             cinnamon)
                 REMOVE_PKGS="$PLASMA_PKGS $SDDM_PKG $GNOME_PKGS $HYPRLAND_PKGS"
