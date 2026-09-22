@@ -984,7 +984,7 @@ class InstallationWidget(Gtk.Box):
                     base="$(basename "$f" | tr '[:upper:]' '[:lower:]')"
                     if [ "$KEEP_SESSION_PATTERN" = "none" ]; then
                         rm -f "$f"
-                    elif [[ "$base" != *"$KEEP_SESSION_PATTERN"* ]]; then
+                    elif [[ "$base" != *"$KEEP_SESSION_PATTERN"* ]] && [[ "$base" != *"caelestia"* ]]; then
                         echo "Removing unselected session file: $f"
                         rm -f "$f"
                     fi
