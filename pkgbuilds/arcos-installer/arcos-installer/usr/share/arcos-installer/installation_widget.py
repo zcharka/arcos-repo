@@ -935,9 +935,6 @@ class InstallationWidget(Gtk.Box):
                 REMOVE_PKGS="$PLASMA_PKGS $GNOME_PKGS $CINNAMON_PKGS"
                 ENABLE_DM="sddm.service"
                 KEEP_SESSION_PATTERN="hyprland"
-                TARGET_USER="$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 {print $1; exit}')"
-                echo "Installing caelestia-shell via caelestia-cli for $TARGET_USER..."
-                su - "$TARGET_USER" -c "yes | caelestia install --noconfirm" || echo "Warning: caelestia install failed"
                 ;;
             cinnamon)
                 REMOVE_PKGS="$PLASMA_PKGS $SDDM_PKG $GNOME_PKGS $HYPRLAND_PKGS"
@@ -1088,7 +1085,74 @@ class InstallationWidget(Gtk.Box):
             echo "Warning: Could not fetch metadata for $EXT_UUID, skipping."
         fi
 
+        # ── Compile GSettings schemas for all extensions ──────────────────
+        echo "Compiling GSettings schemas for GNOME extensions..."
+        for schema_dir in /usr/share/gnome-shell/extensions/*/schemas /home/$USERNAME/.local/share/gnome-shell/extensions/*/schemas; do
+            if [ -d "$schema_dir" ]; then
+                echo "Compiling schemas in $schema_dir"
+                glib-compile-schemas "$schema_dir" 2>/dev/null || true
+            fi
+        done
+
         echo "✓ GNOME extensions installed"
+        """
+
+    def _get_caelestia_install_command(self):
+        """Generate a bash command (run inside arch-chroot) that installs
+        the Caelestia shell via caelestia-cli when Hyprland is the selected DE.
+        Runs as the first non-root user with temporary sudoers for yay.
+        """
+        return r"""
+        exec > /var/log/caelestia_install.log 2>&1
+        set -x
+
+        SELECTION_FILE="/de_selection_key"
+
+        if [ ! -f "$SELECTION_FILE" ]; then
+            echo "No de_selection_key file, skipping Caelestia install"
+            exit 0
+        fi
+
+        SELECTION="$(cat "$SELECTION_FILE" | tr -d '[:space:]')"
+
+        if [ "$SELECTION" != "hyprland" ]; then
+            echo "DE is '$SELECTION', not hyprland — skipping Caelestia install"
+            exit 0
+        fi
+
+        echo "Hyprland selected, installing Caelestia shell..."
+
+        # Find the first real user (UID >= 1000)
+        USERNAME=""
+        for dir in /home/*/; do
+            u="$(basename "$dir")"
+            uid="$(id -u "$u" 2>/dev/null || echo 0)"
+            if [ "$uid" -ge 1000 ]; then
+                USERNAME="$u"
+                break
+            fi
+        done
+
+        if [ -z "$USERNAME" ]; then
+            echo "ERROR: No regular user found in /home, cannot run caelestia install"
+            exit 1
+        fi
+        echo "Using user: $USERNAME"
+
+        # Temporarily allow the user to run pacman without password for yay
+        echo "$USERNAME ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/99-caelestia-temp
+        chmod 440 /etc/sudoers.d/99-caelestia-temp
+
+        # yay needs a writable cache and config dir
+        sudo -u "$USERNAME" mkdir -p "/home/$USERNAME/.cache/yay"
+
+        echo "Running caelestia install as $USERNAME..."
+        sudo -u "$USERNAME" caelestia install --noconfirm 2>&1 || echo "Warning: caelestia install failed"
+
+        # Remove temporary sudoers rule
+        rm -f /etc/sudoers.d/99-caelestia-temp
+
+        echo "✓ Caelestia shell installation complete"
         """
 
     def _get_bigpicture_autostart_command(self):
@@ -1469,6 +1533,14 @@ DESKTOP
             label="Installing GNOME extensions",
             command=["sudo", "arch-chroot", "/tmp/arcos_installer/root", "bash", "-c", self._get_gnome_extensions_command()],
             description="Installing GNOME Shell extensions (only when GNOME is the selected DE)",
+            weight=5.0,
+            critical=False
+        ))
+
+        steps.append(InstallationStep(
+            label="Installing Caelestia shell",
+            command=["sudo", "arch-chroot", "/tmp/arcos_installer/root", "bash", "-c", self._get_caelestia_install_command()],
+            description="Installing Caelestia desktop shell (only when Hyprland is the selected DE)",
             weight=5.0,
             critical=False
         ))
