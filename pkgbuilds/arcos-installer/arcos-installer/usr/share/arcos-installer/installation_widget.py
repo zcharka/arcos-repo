@@ -908,7 +908,7 @@ class InstallationWidget(Gtk.Box):
         CINNAMON_PKGS="cinnamon cinnamon-control-center cinnamon-desktop cinnamon-menus cinnamon-screensaver cinnamon-session cinnamon-settings-daemon cmoffload nemo cjs muffin lightdm lightdm-gtk-greeter"
 
         # Explicit list of Hyprland packages
-        HYPRLAND_PKGS="hyprland waybar wofi kitty grim slurp swaync hyprpaper xdg-desktop-portal-hyprland hyprland-qtutils hyprlang hyprcursor hyprutils"
+        HYPRLAND_PKGS="hyprland waybar wofi kitty grim slurp swaync hyprpaper xdg-desktop-portal-hyprland hyprland-qt-support hyprlang hyprcursor hyprutils"
 
         # Explicit list of Plasma/KDE packages (excluding sddm)
         PLASMA_PKGS="plasma-meta plasma-desktop plasma-workspace kwin breeze discover drkonqi kde-cli-tools kde-gtk-config kpipewire kscreen kscreenlocker kspacebar ksystemstats kwallet-pam kwayland-integration layer-shell-qt libkscreen libksysguard milou ocean-sound-theme oxygen oxygen-sounds plasma-disks plasma-firewall plasma-integration plasma-nm plasma-pa plasma-sdk plasma-systemmonitor plasma-thunderbolt plasma-vault plasma-welcome polkit-kde-agent powerdevil qqc2-breeze-style sddm-kcm systemsettings user-manager xdg-desktop-portal-kde konsole dolphin kate ark gwenview okular spectacle partitionmanager kcalc"
