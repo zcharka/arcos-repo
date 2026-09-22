@@ -910,6 +910,9 @@ class InstallationWidget(Gtk.Box):
         # Explicit list of Hyprland packages
         HYPRLAND_PKGS="hyprland waybar wofi kitty grim slurp swaync hyprpaper xdg-desktop-portal-hyprland hyprland-qt-support hyprlang hyprcursor hyprutils"
 
+        # Caelestia Shell packages (only kept when Hyprland is selected)
+        CAELESTIA_PKGS="caelestia-shell caelestia-cli quickshell-git qt6-m3shapes-git libcava ttf-rubik-vf python-materialyoucolor"
+
         # Explicit list of Plasma/KDE packages (excluding sddm)
         PLASMA_PKGS="plasma-meta plasma-desktop plasma-workspace kwin breeze discover drkonqi kde-cli-tools kde-gtk-config kpipewire kscreen kscreenlocker kspacebar ksystemstats kwallet-pam kwayland-integration layer-shell-qt libkscreen libksysguard milou ocean-sound-theme oxygen oxygen-sounds plasma-disks plasma-firewall plasma-integration plasma-nm plasma-pa plasma-sdk plasma-systemmonitor plasma-thunderbolt plasma-vault plasma-welcome polkit-kde-agent powerdevil qqc2-breeze-style sddm-kcm systemsettings user-manager xdg-desktop-portal-kde konsole dolphin kate ark gwenview okular spectacle partitionmanager kcalc"
 
@@ -922,12 +925,12 @@ class InstallationWidget(Gtk.Box):
 
         case "$SELECTION" in
             plasma)
-                REMOVE_PKGS="$GNOME_PKGS $CINNAMON_PKGS $HYPRLAND_PKGS"
+                REMOVE_PKGS="$GNOME_PKGS $CINNAMON_PKGS $HYPRLAND_PKGS $CAELESTIA_PKGS"
                 ENABLE_DM="sddm.service"
                 KEEP_SESSION_PATTERN="plasma"
                 ;;
             gnome)
-                REMOVE_PKGS="$PLASMA_PKGS $SDDM_PKG $CINNAMON_PKGS $HYPRLAND_PKGS"
+                REMOVE_PKGS="$PLASMA_PKGS $SDDM_PKG $CINNAMON_PKGS $HYPRLAND_PKGS $CAELESTIA_PKGS"
                 ENABLE_DM="gdm.service"
                 KEEP_SESSION_PATTERN="gnome"
                 ;;
@@ -937,12 +940,12 @@ class InstallationWidget(Gtk.Box):
                 KEEP_SESSION_PATTERN="hyprland"
                 ;;
             cinnamon)
-                REMOVE_PKGS="$PLASMA_PKGS $SDDM_PKG $GNOME_PKGS $HYPRLAND_PKGS"
+                REMOVE_PKGS="$PLASMA_PKGS $SDDM_PKG $GNOME_PKGS $HYPRLAND_PKGS $CAELESTIA_PKGS"
                 ENABLE_DM="lightdm.service"
                 KEEP_SESSION_PATTERN="cinnamon"
                 ;;
             none)
-                REMOVE_PKGS="$PLASMA_PKGS $SDDM_PKG $GNOME_PKGS $CINNAMON_PKGS $HYPRLAND_PKGS"
+                REMOVE_PKGS="$PLASMA_PKGS $SDDM_PKG $GNOME_PKGS $CINNAMON_PKGS $HYPRLAND_PKGS $CAELESTIA_PKGS"
                 ENABLE_DM=""
                 KEEP_SESSION_PATTERN="none"
                 ;;
@@ -1098,9 +1101,10 @@ class InstallationWidget(Gtk.Box):
         """
 
     def _get_caelestia_install_command(self):
-        """Generate a bash command (run inside arch-chroot) that installs
-        the Caelestia shell via caelestia-cli when Hyprland is the selected DE.
-        Runs as the first non-root user with temporary sudoers for yay.
+        """Generate a bash command (run inside arch-chroot) that configures
+        Caelestia Shell autostart for Hyprland users.
+        Caelestia packages are already installed from the ISO image;
+        this step only adds the exec-once line to the user's Hyprland config.
         """
         return r"""
         exec > /var/log/caelestia_install.log 2>&1
@@ -1109,50 +1113,57 @@ class InstallationWidget(Gtk.Box):
         SELECTION_FILE="/de_selection_key"
 
         if [ ! -f "$SELECTION_FILE" ]; then
-            echo "No de_selection_key file, skipping Caelestia install"
+            echo "No de_selection_key file, skipping Caelestia config"
             exit 0
         fi
 
         SELECTION="$(cat "$SELECTION_FILE" | tr -d '[:space:]')"
 
         if [ "$SELECTION" != "hyprland" ]; then
-            echo "DE is '$SELECTION', not hyprland — skipping Caelestia install"
+            echo "DE is '$SELECTION', not hyprland — skipping Caelestia config"
             exit 0
         fi
 
-        echo "Hyprland selected, installing Caelestia shell..."
+        echo "Hyprland selected, configuring Caelestia shell autostart..."
 
-        # Find the first real user (UID >= 1000)
-        USERNAME=""
+        # Add exec-once to /etc/skel hyprland config (for future users)
+        SKEL_HYPR="/etc/skel/.config/hypr/hyprland.conf"
+        if [ -f "$SKEL_HYPR" ]; then
+            if ! grep -q 'caelestia shell' "$SKEL_HYPR"; then
+                echo '' >> "$SKEL_HYPR"
+                echo '# Caelestia Shell' >> "$SKEL_HYPR"
+                echo 'exec-once = caelestia shell -d' >> "$SKEL_HYPR"
+                echo "Added caelestia autostart to skel hyprland config"
+            fi
+        fi
+
+        # Add exec-once to each existing user's hyprland config
         for dir in /home/*/; do
             u="$(basename "$dir")"
             uid="$(id -u "$u" 2>/dev/null || echo 0)"
             if [ "$uid" -ge 1000 ]; then
-                USERNAME="$u"
-                break
+                USER_HYPR="/home/$u/.config/hypr/hyprland.conf"
+                if [ -f "$USER_HYPR" ]; then
+                    if ! grep -q 'caelestia shell' "$USER_HYPR"; then
+                        echo '' >> "$USER_HYPR"
+                        echo '# Caelestia Shell' >> "$USER_HYPR"
+                        echo 'exec-once = caelestia shell -d' >> "$USER_HYPR"
+                        chown "$u:$u" "$USER_HYPR"
+                        echo "Added caelestia autostart for user $u"
+                    fi
+                else
+                    # Copy skel config if user doesn't have one
+                    mkdir -p "/home/$u/.config/hypr"
+                    if [ -f "$SKEL_HYPR" ]; then
+                        cp "$SKEL_HYPR" "$USER_HYPR"
+                        chown -R "$u:$u" "/home/$u/.config/hypr"
+                        echo "Copied hyprland config with caelestia for user $u"
+                    fi
+                fi
             fi
         done
 
-        if [ -z "$USERNAME" ]; then
-            echo "ERROR: No regular user found in /home, cannot run caelestia install"
-            exit 1
-        fi
-        echo "Using user: $USERNAME"
-
-        # Temporarily allow the user to run pacman without password for yay
-        echo "$USERNAME ALL=(ALL) NOPASSWD: /usr/bin/pacman" > /etc/sudoers.d/99-caelestia-temp
-        chmod 440 /etc/sudoers.d/99-caelestia-temp
-
-        # yay needs a writable cache and config dir
-        sudo -u "$USERNAME" mkdir -p "/home/$USERNAME/.cache/yay"
-
-        echo "Running caelestia install as $USERNAME..."
-        sudo -u "$USERNAME" caelestia install --noconfirm 2>&1 || echo "Warning: caelestia install failed"
-
-        # Remove temporary sudoers rule
-        rm -f /etc/sudoers.d/99-caelestia-temp
-
-        echo "✓ Caelestia shell installation complete"
+        echo "✓ Caelestia shell configuration complete"
         """
 
     def _get_bigpicture_autostart_command(self):
