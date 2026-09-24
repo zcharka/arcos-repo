@@ -1,6 +1,6 @@
 pkgname=arcos-release
 pkgver=1.0
-pkgrel=4
+pkgrel=5
 pkgdesc="ArcOS system identification files"
 arch=('any')
 license=('GPL3')
