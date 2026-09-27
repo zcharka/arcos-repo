@@ -1,6 +1,8 @@
-EN:
+# arcos-repo
 
-**How to add repository**
+## EN
+
+### How to add repository
 
 > 1. Open `/etc/pacman.conf` e.g `nano /etc/pacman.conf` and add at the end of the file:
 >
@@ -16,9 +18,9 @@ EN:
 > sudo pacman -Sy
 > ```
 
-PL:
+# PL
 
-**Jak dodać repozytorium**
+### Jak dodać repozytorium
 
 > 1. Otwórz `/etc/pacman.conf` np. `nano /etc/pacman.conf` i dodaj to na końcu pliku:
 >
