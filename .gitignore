@@ -1,2 +1,3 @@
-**/src/
-**/pkg/
+# Nie śledź zawartości katalogów pkgbuilds
+pkgbuilds/
+**/pkgbuilds/
