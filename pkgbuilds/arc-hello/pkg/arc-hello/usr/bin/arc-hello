@@ -1,0 +1,20 @@
+#!/usr/bin/env python3
+import sys
+import os
+
+# Add candidate package paths
+base_dir = os.path.dirname(os.path.abspath(__file__))
+candidate_paths = [
+    "/usr/share/arc-hello",
+    os.path.abspath(os.path.join(base_dir, "..", "share", "arc-hello")),
+    os.path.abspath(os.path.join(base_dir, "..", "..", "arc-hello", "usr", "share", "arc-hello"))
+]
+
+for path in candidate_paths:
+    if os.path.exists(path) and path not in sys.path:
+        sys.path.insert(0, path)
+
+from arc_hello.app import main
+
+if __name__ == "__main__":
+    sys.exit(main())

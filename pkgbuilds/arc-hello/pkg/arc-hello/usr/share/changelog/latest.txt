@@ -1,0 +1,13 @@
+===================================================
+                ArcOS Changelog
+===================================================
+Wersja: Najnowsza wersja ArcOS Rolling
+
+Nowości i usprawnienia:
+- Wprowadzono nową aplikację Arc Hello (GTK4 + Libadwaita)
+- Dodano integrację ze Steam (Big Picture toggle, Gamemode, Gamescope)
+- Usprawniono instalator sesji X11 dla różnych środowisk graficznych
+- Dodano menedżer vtrt-manager oraz integrację z Arc Store
+- Wdrożono Windows-style konfigurator domyślnych aplikacji (xdg-mime)
+- Poprawiono ogólną wydajność systemu oraz pakietów
+===================================================

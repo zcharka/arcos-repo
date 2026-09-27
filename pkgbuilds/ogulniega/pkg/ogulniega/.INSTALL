@@ -1,0 +1,15 @@
+post_install() {
+    echo "Downloading and installing app from .flatpakref file..."
+    flatpak install --system -y --from /usr/share/flatpaks/OgulniegaInstaller.flatpakref
+}
+
+post_upgrade() {
+    post_install
+}
+
+post_remove() {
+    echo "Removing an flatpak app..."
+
+    flatpak uninstall --system -y com.ogulniega.launcher
+
+}

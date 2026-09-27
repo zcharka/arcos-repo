@@ -914,7 +914,7 @@ class InstallationWidget(Gtk.Box):
         CAELESTIA_PKGS="caelestia-shell caelestia-cli quickshell-git qt6-m3shapes-git libcava ttf-rubik-vf python-materialyoucolor"
 
         # Explicit list of Plasma/KDE packages (excluding sddm)
-        PLASMA_PKGS="plasma-meta plasma-desktop plasma-workspace kwin breeze discover drkonqi kde-cli-tools kde-gtk-config kpipewire kscreen kscreenlocker kspacebar ksystemstats kwallet-pam kwayland-integration layer-shell-qt libkscreen libksysguard milou ocean-sound-theme oxygen oxygen-sounds plasma-disks plasma-firewall plasma-integration plasma-nm plasma-pa plasma-sdk plasma-systemmonitor plasma-thunderbolt plasma-vault plasma-welcome polkit-kde-agent powerdevil qqc2-breeze-style sddm-kcm systemsettings user-manager xdg-desktop-portal-kde konsole dolphin kate ark gwenview okular spectacle partitionmanager kcalc"
+        PLASMA_PKGS="plasma-meta plasma-desktop plasma-workspace kwin breeze discover drkonqi kde-cli-tools kde-gtk-config kpipewire kscreen kscreenlocker kspacebar ksystemstats kwallet-pam kwayland-integration layer-shell-qt libkscreen libksysguard milou ocean-sound-theme oxygen oxygen-sounds plasma-disks plasma-firewall plasma-integration plasma-nm plasma-pa plasma-sdk plasma-systemmonitor plasma-thunderbolt plasma-vault plasma-welcome polkit-kde-agent powerdevil qqc2-breeze-style sddm-kcm systemsettings user-manager xdg-desktop-portal-kde konsole dolphin kate ark gwenview okular spectacle partitionmanager kcalc arcos-kwin-effects"
 
         # Display Managers
         SDDM_PKG="sddm"
